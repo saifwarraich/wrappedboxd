@@ -1,5 +1,14 @@
 import { computeTopKeywords } from '../../lib/stats.js';
 
+export const BRAND_COLORS = ['#ff8000', '#00e054', '#40bcf4'];
+export const MIN_SIZE = 11;
+export const MAX_SIZE = 22;
+
+export function scaleSize(count, minCount, maxCount) {
+  if (maxCount === minCount) return (MIN_SIZE + MAX_SIZE) / 2;
+  return MIN_SIZE + ((count - minCount) / (maxCount - minCount)) * (MAX_SIZE - MIN_SIZE);
+}
+
 export function renderThemes(films, container, onFilterByKeyword) {
   const keywords = computeTopKeywords(films, 50);
 
@@ -10,30 +19,18 @@ export function renderThemes(films, container, onFilterByKeyword) {
 
   const maxCount = keywords[0].count;
   const minCount = keywords[keywords.length - 1].count;
-  const MIN_SIZE = 11;
-  const MAX_SIZE = 22;
-
-  function scaleSize(count) {
-    if (maxCount === minCount) return (MIN_SIZE + MAX_SIZE) / 2;
-    return MIN_SIZE + ((count - minCount) / (maxCount - minCount)) * (MAX_SIZE - MIN_SIZE);
-  }
-
-  function scaleOpacity(count) {
-    if (maxCount === minCount) return 0.7;
-    return 0.4 + ((count - minCount) / (maxCount - minCount)) * 0.6;
-  }
 
   container.innerHTML = `
     <div class="lbs-themes-layout">
       <div class="lbs-themes-cloud" id="lbs-themes-cloud">
-        ${keywords.map(kw => {
-          const size = scaleSize(kw.count);
-          const opacity = scaleOpacity(kw.count);
+        ${keywords.map((kw, i) => {
+          const size = scaleSize(kw.count, minCount, maxCount);
+          const color = BRAND_COLORS[i % BRAND_COLORS.length];
           return `
             <button
               class="lbs-theme-tag"
               data-keyword="${kw.keyword}"
-              style="font-size:${size}px; color: rgba(0,224,84,${opacity})"
+              style="font-size:${size}px; color: ${color}"
               title="${kw.count} films"
             >${kw.keyword}</button>
           `;
