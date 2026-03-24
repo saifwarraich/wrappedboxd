@@ -79,6 +79,32 @@ One of: **Approve** | **Request Changes** | **Block (Critical Issues)**
 
 ---
 
+## Step 5 — Post the review
+ 
+First, check if this is your own PR:
+```bash
+gh pr view $ARGUMENTS --json author --jq '.author.login'
+gh api user --jq '.login'
+```
+ 
+If the PR author matches the current GitHub user (own PR):
+- **Never use `--request-changes`** — GitHub blocks this with an error
+- Always use `--comment` regardless of verdict
+- Add a note at the top of your review: *"(Self-review — commenting instead of requesting changes)"*
+ 
+```bash
+gh pr review $ARGUMENTS --comment --body "<your full review output from step 4>"
+```
+ 
+If it's someone else's PR:
+ 
+Request changes (if needed):
+```bash
+gh pr review $ARGUMENTS --request-changes --body "<review>"
+```
+ 
+---
+
 ### Questions for the author
 - <anything unclear that needs clarification>
 ```
