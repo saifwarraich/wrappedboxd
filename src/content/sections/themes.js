@@ -1,5 +1,14 @@
 import { computeTopKeywords } from '../../lib/stats.js';
 
+export const BRAND_COLORS = ['#ff8000', '#00e054', '#40bcf4'];
+export const MIN_SIZE = 11;
+export const MAX_SIZE = 22;
+
+export function scaleSize(count, minCount, maxCount) {
+  if (maxCount === minCount) return (MIN_SIZE + MAX_SIZE) / 2;
+  return MIN_SIZE + ((count - minCount) / (maxCount - minCount)) * (MAX_SIZE - MIN_SIZE);
+}
+
 export function renderThemes(films, container, onFilterByKeyword) {
   const keywords = computeTopKeywords(films, 50);
 
@@ -10,20 +19,12 @@ export function renderThemes(films, container, onFilterByKeyword) {
 
   const maxCount = keywords[0].count;
   const minCount = keywords[keywords.length - 1].count;
-  const MIN_SIZE = 11;
-  const MAX_SIZE = 22;
-  const BRAND_COLORS = ['#ff8000', '#00e054', '#40bcf4'];
-
-  function scaleSize(count) {
-    if (maxCount === minCount) return (MIN_SIZE + MAX_SIZE) / 2;
-    return MIN_SIZE + ((count - minCount) / (maxCount - minCount)) * (MAX_SIZE - MIN_SIZE);
-  }
 
   container.innerHTML = `
     <div class="lbs-themes-layout">
       <div class="lbs-themes-cloud" id="lbs-themes-cloud">
         ${keywords.map((kw, i) => {
-          const size = scaleSize(kw.count);
+          const size = scaleSize(kw.count, minCount, maxCount);
           const color = BRAND_COLORS[i % BRAND_COLORS.length];
           return `
             <button

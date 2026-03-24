@@ -630,11 +630,11 @@ const PANEL_STYLES = `
   }
 
   .lbs-theme-tag {
-    background: #fff;
+    background: var(--lbs-text-bright);
     border: none;
     cursor: pointer;
     padding: 2px 8px;
-    border-radius: 3px;
+    border-radius: var(--lbs-radius);
     transition: opacity 0.15s;
     font-family: inherit;
     font-weight: 600;
