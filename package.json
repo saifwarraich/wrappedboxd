@@ -1,0 +1,17 @@
+{
+  "name": "letterboxd-stats",
+  "version": "1.0.0",
+  "description": "Rich stats panel injected into your Letterboxd profile.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "vite-plugin-web-extension": "^4.0.0"
+  }
+}

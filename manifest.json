@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Letterboxd Stats",
+  "version": "1.0.0",
+  "description": "Rich stats panel injected into your Letterboxd profile.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://letterboxd.com/*",
+    "https://api.themoviedb.org/*",
+    "https://image.tmdb.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://letterboxd.com/*"],
+      "js": ["src/content/index.js"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "128": "src/assets/icon.png"
+    }
+  },
+  "icons": {
+    "128": "src/assets/icon.png"
+  }
+}

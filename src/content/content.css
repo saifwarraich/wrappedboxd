@@ -1,0 +1,8 @@
+/* Letterboxd Stats Extension — injected styles */
+/* These styles are minimal since the panel uses Shadow DOM */
+
+#lbs-stats-panel {
+  display: block;
+  width: 100%;
+  margin-bottom: 20px;
+}
