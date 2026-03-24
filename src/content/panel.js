@@ -630,17 +630,18 @@ const PANEL_STYLES = `
   }
 
   .lbs-theme-tag {
-    background: none;
+    background: #fff;
     border: none;
     cursor: pointer;
-    padding: 2px 4px;
-    border-radius: var(--lbs-radius);
-    transition: background 0.15s;
+    padding: 2px 8px;
+    border-radius: 3px;
+    transition: opacity 0.15s;
     font-family: inherit;
+    font-weight: 600;
   }
 
   .lbs-theme-tag:hover {
-    background: rgba(0, 224, 84, 0.1);
+    opacity: 0.8;
   }
 
   .lbs-themes-stats {
