@@ -45,6 +45,9 @@ function parseRSSItem(item) {
   const filmTitle = getTagText(item, 'filmTitle');
   const filmYear = getTagText(item, 'filmYear');
   const watchedDate = getTagText(item, 'watchedDate');
+
+  // Skip non-film entries (lists, reviews without a film tag, etc.)
+  if (!filmTitle && !watchedDate) return null;
   const memberRating = getTagText(item, 'memberRating');
   const rewatch = getTagText(item, 'rewatch');
 
@@ -121,8 +124,8 @@ export async function fetchRSS(username) {
   const films = [];
 
   for (let i = 0; i < items.length; i++) {
-    const { film } = parseRSSItem(items[i]);
-    if (film.name) films.push(film);
+    const parsed = parseRSSItem(items[i]);
+    if (parsed && parsed.film.name) films.push(parsed.film);
   }
 
   return films;
@@ -140,7 +143,7 @@ export async function syncRSS(username, apiKey) {
     const items = doc.getElementsByTagName('item');
     rssItems = Array.from(items)
       .map(item => parseRSSItem(item))
-      .filter(({ film }) => film.name);
+      .filter(parsed => parsed && parsed.film.name);
   } catch (err) {
     console.warn('[LBS] syncRSS: fetch failed', err);
     return { added: 0 };
@@ -150,27 +153,42 @@ export async function syncRSS(username, apiKey) {
 
   const lastWatched = await getLastWatchedDate();
 
-  const newFilms = [];
+  const brandNewFilms = [];    // films not in DB at all
   const newDiaryEntries = [];
-  const unenrichedFilms = [];
-  const enrichedFilms = [];
+  const unenrichedFilms = [];  // in DB but not enriched
+  const enrichedFilms = [];    // in DB and enriched (may need last_watched update)
+  let newWatchCount = 0;
 
   for (const { film, diaryEntry } of rssItems) {
     const inDb = await getFilm(film.letterboxd_id);
     if (inDb) {
-      const merged = { ...film, ...inDb, letterboxd_uri: inDb.letterboxd_uri || film.letterboxd_uri };
+      // Check if this RSS item is a new watch event not yet recorded
+      const isNewWatch = diaryEntry && (!inDb.last_watched || diaryEntry.watched_date > inDb.last_watched);
+      const merged = {
+        ...film,
+        ...inDb,
+        letterboxd_uri: inDb.letterboxd_uri || film.letterboxd_uri,
+        ...(isNewWatch ? {
+          last_watched: diaryEntry.watched_date,
+          rating: diaryEntry.rating ?? inDb.rating,
+        } : {}),
+      };
+      if (isNewWatch) {
+        newDiaryEntries.push(diaryEntry);
+        newWatchCount++;
+      }
       if (inDb.enriched) {
         enrichedFilms.push(merged);
       } else {
         unenrichedFilms.push(merged);
       }
-    } else if (!lastWatched || !film.last_watched || film.last_watched > lastWatched) {
-      newFilms.push(film);
+    } else if (!lastWatched || !film.last_watched || film.last_watched >= lastWatched) {
+      brandNewFilms.push(film);
       if (diaryEntry) newDiaryEntries.push(diaryEntry);
     }
   }
 
-  const toEnrich = [...newFilms, ...unenrichedFilms];
+  const toEnrich = [...brandNewFilms, ...unenrichedFilms];
   let enriched = toEnrich;
   if (toEnrich.length && apiKey) {
     try {
@@ -184,5 +202,5 @@ export async function syncRSS(username, apiKey) {
   if (newDiaryEntries.length) await upsertDiaryEntries(newDiaryEntries);
   await chrome.storage.local.set({ last_rss_sync: new Date().toISOString() });
 
-  return { added: newFilms.length };
+  return { added: brandNewFilms.length + newWatchCount };
 }
