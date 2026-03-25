@@ -61,9 +61,6 @@ const PANEL_STYLES = `
     min-width: 120px;
   }
 
-  .lbs-header-title span {
-    color: var(--lbs-green);
-  }
 
   .lbs-sync-info {
     font-size: 11px;
@@ -1008,7 +1005,7 @@ export function injectPanel() {
 export function renderLoadingState(panel) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title">Un<span>boxd</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
       <div class="lbs-sync-info">Loading...</div>
     </div>
     <div class="lbs-body">
@@ -1028,7 +1025,7 @@ export function renderLoadingState(panel) {
 export function renderErrorState(panel, message) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title">Un<span>boxd</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
     </div>
     <div class="lbs-body">
       <div class="lbs-section">
@@ -1088,7 +1085,7 @@ function mergeFilmsIntoMap(films, map) {
 export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title">Un<span>boxd</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
     </div>
     <div class="lbs-onboarding">
       <h2>Welcome to Unboxd</h2>
@@ -1105,7 +1102,7 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
             <input type="text" class="lbs-input" id="lbs-tmdb-key-input" placeholder="Paste your TMDB API key...">
             <button class="lbs-btn lbs-btn--green" id="lbs-save-key-btn">Save &amp; Continue</button>
           </div>
-          <p class="lbs-input-note">Get a free key at <strong>themoviedb.org/settings/api</strong></p>
+          <p class="lbs-input-note">Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener" style="color:var(--lbs-green)">themoviedb.org/settings/api</a></p>
           <div id="lbs-key-status"></div>
         </div>
 
@@ -1117,7 +1114,7 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
           <div class="lbs-drop-zone" id="lbs-drop-2">
             <div class="lbs-drop-zone-icon">📄</div>
             <div class="lbs-drop-zone-text">Drop watched.csv here, or click to browse</div>
-            <div class="lbs-drop-zone-sub">Letterboxd → Settings → Import &amp; Export → Export Your Data</div>
+            <div class="lbs-drop-zone-sub">Get your files at <a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener" style="color:var(--lbs-green)">letterboxd.com/settings/data</a></div>
             <input type="file" accept=".csv" id="lbs-input-2" style="display:none">
           </div>
           <div id="lbs-status-2"></div>
@@ -1339,11 +1336,11 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
             <button class="lbs-btn lbs-btn--green" id="lbs-settings-save-key">Save</button>
           </div>
           <div class="lbs-settings-status" id="lbs-settings-key-status"></div>
-          <div class="lbs-input-note">Get a free key at <strong>themoviedb.org/settings/api</strong></div>
+          <div class="lbs-input-note">Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener" style="color:var(--lbs-green)">themoviedb.org/settings/api</a></div>
         </div>
         <div class="lbs-settings-block">
           <h4>Update Film Data</h4>
-          <p class="lbs-input-note" style="margin-bottom:10px">Upload new exports to add or update your film list. Files are merged — you won't lose existing data.</p>
+          <p class="lbs-input-note" style="margin-bottom:10px">Upload new exports to add or update your film list. Files are merged — you won't lose existing data. Get your files at <a href="https://letterboxd.com/settings/data/" target="_blank" rel="noopener" style="color:var(--lbs-green)">letterboxd.com/settings/data</a></p>
 
           <div id="lbs-su-step-1">
             <div class="lbs-step-label">Step 1 — Required</div>
@@ -1480,7 +1477,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
 
     panel.innerHTML = `
       <div class="lbs-header">
-        <div class="lbs-header-title">Un<span>boxd</span></div>
+        <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
         <div class="lbs-sync-info">Last synced ${syncTime}</div>
         <div class="lbs-header-actions">
           ${isOwnProfile ? `
