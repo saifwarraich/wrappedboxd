@@ -1,7 +1,22 @@
 /**
- * Parse Letterboxd diary.csv export.
- * CSV columns: Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
+ * Parse Letterboxd CSV exports.
+ * Supports: diary.csv, ratings.csv, watched.csv
+ * Auto-detects file type from headers.
+ *
+ * Returns: { films: Film[], diaryEntries: DiaryEntry[] }
+ *
+ * Film shape (CSV fields only, TMDB fields null/empty):
+ *   letterboxd_id, name, year, rating, first_watched, last_watched,
+ *   rewatch_count, tags, sources, letterboxd_uri,
+ *   tmdb_id, genres, director, director_id, director_photo, cast,
+ *   keywords, poster, tmdb_rating, runtime, origin_country, decade,
+ *   enriched, enriched_at
+ *
+ * DiaryEntry shape:
+ *   id, letterboxd_id, watched_date, rating, rewatch, tags, source
  */
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function slugify(name, year) {
   const slug = name
@@ -12,32 +27,18 @@ function slugify(name, year) {
   return `${slug}-${year}`;
 }
 
-function extractSlugFromURI(uri) {
-  if (!uri) return null;
-  // URI like https://boxd.it/xxxx — use the path segment
-  try {
-    const url = new URL(uri);
-    const parts = url.pathname.split('/').filter(Boolean);
-    if (parts.length > 0) {
-      return parts[parts.length - 1];
-    }
-  } catch (e) {
-    // not a valid URL
-  }
-  return null;
-}
+// letterboxd_id is always slugify(name, year) — the only field consistent across
+// all three export files. URIs differ in format (letterboxd.com vs boxd.it) between
+// files and Letterboxd slugs may or may not include the year, making them unreliable
+// as cross-file keys. name+year slugify is deterministic and always matches.
 
 function parseRating(ratingStr) {
   if (!ratingStr || ratingStr.trim() === '') return null;
   const trimmed = ratingStr.trim();
 
-  // Handle decimal format (e.g. "4.5", "3.0")
   const decimal = parseFloat(trimmed);
-  if (!isNaN(decimal)) {
-    return Math.round(decimal * 2) / 2; // ensure 0.5 increments
-  }
+  if (!isNaN(decimal)) return Math.round(decimal * 2) / 2;
 
-  // Handle star format (e.g. "★★★½")
   let stars = 0;
   for (const char of trimmed) {
     if (char === '★') stars += 1;
@@ -71,55 +72,197 @@ function parseCSVLine(line) {
   return result;
 }
 
-export function parseCSV(csvText) {
-  const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
-  if (lines.length < 2) return [];
+function blankTmdbFields() {
+  return {
+    tmdb_id: null,
+    genres: [],
+    director: null,
+    director_id: null,
+    director_photo: null,
+    cast: [],
+    keywords: [],
+    poster: null,
+    tmdb_rating: null,
+    runtime: null,
+    origin_country: null,
+    enriched: false,
+    enriched_at: null,
+  };
+}
 
-  // Skip header row
-  const films = [];
+function makeFilm(letterboxd_id, name, year, uri) {
+  return {
+    letterboxd_id,
+    name,
+    year,
+    rating: null,
+    first_watched: null,
+    last_watched: null,
+    rewatch_count: 0,
+    tags: [],
+    sources: [],
+    letterboxd_uri: uri || null,
+    decade: year ? Math.floor(year / 10) * 10 : null,
+    ...blankTmdbFields(),
+  };
+}
+
+function makeDiaryEntry(letterboxd_id, watched_date, rating, rewatch, tags) {
+  return {
+    id: `${letterboxd_id}_${watched_date}`,
+    letterboxd_id,
+    watched_date,
+    rating,
+    rewatch,
+    tags,
+    source: 'diary',
+  };
+}
+
+// ─── File type detection ──────────────────────────────────────────────────────
+
+function detectFileType(headerLine) {
+  const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
+  if (headers.includes('rewatch')) return 'diary';
+  if (headers.includes('rating') && !headers.includes('rewatch')) return 'ratings';
+  return 'watched';
+}
+
+// ─── Parsers ──────────────────────────────────────────────────────────────────
+
+/**
+ * diary.csv: Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
+ * One row per diary log — film may appear multiple times (rewatches).
+ */
+function parseDiary(lines) {
+  const filmsMap = new Map();   // letterboxd_id → Film
+  const diaryEntries = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i]);
     if (cols.length < 8) continue;
 
-    const [date, name, yearStr, uri, ratingStr, rewatchStr, tags, watchedDate] = cols;
-
+    const [, name, yearStr, uri, ratingStr, rewatchStr, tagsStr, watchedDateStr] = cols;
     if (!name || !name.trim()) continue;
 
     const year = parseInt(yearStr, 10) || null;
-    const uriSlug = extractSlugFromURI(uri);
-    const letterboxd_id = uriSlug || slugify(name.trim(), year);
+    const uriTrimmed = uri && uri.trim() ? uri.trim() : null;
+    const letterboxd_id = slugify(name.trim(), year);
     const rating = parseRating(ratingStr);
     const rewatch = rewatchStr && rewatchStr.trim().toLowerCase() === 'yes';
-    const watched = watchedDate && watchedDate.trim() ? watchedDate.trim() : (date && date.trim() ? date.trim() : null);
-    const decade = year ? Math.floor(year / 10) * 10 : null;
+    const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+    const watched_date = watchedDateStr && watchedDateStr.trim() ? watchedDateStr.trim() : null;
 
-    films.push({
-      letterboxd_id,
-      name: name.trim(),
-      year,
-      watched_date: watched,
-      rating,
-      rewatch,
-      review: '',
-      letterboxd_uri: uri && uri.trim() ? uri.trim() : null,
-      // TMDB fields — empty/null until enriched
-      tmdb_id: null,
-      genres: [],
-      director: null,
-      director_id: null,
-      director_photo: null,
-      cast: [],
-      keywords: [],
-      poster: null,
-      tmdb_rating: null,
-      runtime: null,
-      origin_country: null,
-      decade,
-      enriched: false,
-      enriched_at: null,
-    });
+    if (!watched_date) continue;
+
+    // Diary entry
+    diaryEntries.push(makeDiaryEntry(letterboxd_id, watched_date, rating, rewatch, tags));
+
+    // Film record — merge if already seen (multiple rewatches)
+    if (!filmsMap.has(letterboxd_id)) {
+      const film = makeFilm(letterboxd_id, name.trim(), year, uriTrimmed);
+      film.sources = ['diary'];
+      filmsMap.set(letterboxd_id, film);
+    }
+
+    const film = filmsMap.get(letterboxd_id);
+
+    // first/last watched
+    if (!film.first_watched || watched_date < film.first_watched) film.first_watched = watched_date;
+    if (!film.last_watched || watched_date > film.last_watched) film.last_watched = watched_date;
+
+    // latest rating wins
+    if (rating !== null && watched_date >= (film.last_watched || '')) {
+      film.rating = rating;
+    }
+
+    // rewatch count
+    if (rewatch) film.rewatch_count = (film.rewatch_count || 0) + 1;
+
+    // tags: union
+    const tagSet = new Set([...film.tags, ...tags]);
+    film.tags = [...tagSet];
   }
 
-  return films;
+  return { films: [...filmsMap.values()], diaryEntries };
+}
+
+/**
+ * ratings.csv: Date,Name,Year,Letterboxd URI,Rating
+ * One row per rated film.
+ */
+function parseRatings(lines) {
+  const films = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    if (cols.length < 5) continue;
+
+    const [dateStr, name, yearStr, uri, ratingStr] = cols;
+    if (!name || !name.trim()) continue;
+
+    const year = parseInt(yearStr, 10) || null;
+    const uriTrimmed = uri && uri.trim() ? uri.trim() : null;
+    const letterboxd_id = slugify(name.trim(), year);
+    const rating = parseRating(ratingStr);
+    const date = dateStr && dateStr.trim() ? dateStr.trim() : null;
+
+    const film = makeFilm(letterboxd_id, name.trim(), year, uriTrimmed);
+    film.rating = rating;
+    film.first_watched = date;
+    film.last_watched = date;
+    film.sources = ['ratings'];
+
+    films.push(film);
+  }
+
+  return { films, diaryEntries: [] };
+}
+
+/**
+ * watched.csv: Date,Name,Year,Letterboxd URI
+ * One row per watched film (includes unrated).
+ */
+function parseWatched(lines) {
+  const films = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    if (cols.length < 4) continue;
+
+    const [dateStr, name, yearStr, uri] = cols;
+    if (!name || !name.trim()) continue;
+
+    const year = parseInt(yearStr, 10) || null;
+    const uriTrimmed = uri && uri.trim() ? uri.trim() : null;
+    const letterboxd_id = slugify(name.trim(), year);
+    const date = dateStr && dateStr.trim() ? dateStr.trim() : null;
+
+    const film = makeFilm(letterboxd_id, name.trim(), year, uriTrimmed);
+    film.first_watched = date;
+    film.last_watched = date;
+    film.sources = ['watched'];
+
+    films.push(film);
+  }
+
+  return { films, diaryEntries: [] };
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Parse any Letterboxd CSV export.
+ * Auto-detects file type from the header row.
+ * Returns { films: Film[], diaryEntries: DiaryEntry[] }
+ */
+export function parseLetterboxdCSV(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
+  if (lines.length < 2) return { films: [], diaryEntries: [] };
+
+  const type = detectFileType(lines[0]);
+
+  if (type === 'diary') return parseDiary(lines);
+  if (type === 'ratings') return parseRatings(lines);
+  return parseWatched(lines);
 }

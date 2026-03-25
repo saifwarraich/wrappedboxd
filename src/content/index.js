@@ -1,4 +1,4 @@
-import { initDB, getAllFilms, getFilmCount } from '../lib/db.js';
+import { initDB, getAllFilms, getFilmCount, getAllDiaryEntries } from '../lib/db.js';
 import { fetchRSS, syncRSS } from '../lib/rss.js';
 import {
   injectPanel,
@@ -96,12 +96,7 @@ async function handleOwnProfile(panel, shadow, username, settings) {
   // Onboarding: not yet set up
   if (!settings.onboarded || filmCount === 0) {
     renderOnboarding(panel, {
-      onSaveKey: (key) => {
-        settings.tmdb_api_key = key;
-      },
-      onCSVDrop: (films) => {
-        console.log('[LBS] CSV parsed:', films.length, 'films');
-      },
+      onSaveKey: (key) => { settings.tmdb_api_key = key; },
       onEnrich: async (enrichedFilms) => {
         settings.onboarded = true;
         await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
@@ -125,20 +120,21 @@ async function handleOwnProfile(panel, shadow, username, settings) {
 
 async function loadAndShowStats(panel, shadow, username, settings, initialFilms) {
   let allFilms = initialFilms;
+  let allDiaryEntries = [];
+  try { allDiaryEntries = await getAllDiaryEntries(); } catch (e) { /* non-fatal */ }
 
-  renderFullPanel(panel, allFilms, true, username, settings, {
+  renderFullPanel(panel, allFilms, allDiaryEntries, true, username, settings, {
     onNewFilms: (count) => {
       showToast(shadow, `↻ ${count} new film${count !== 1 ? 's' : ''} synced`);
-      // Reload and re-render
-      getAllFilms().then(films => {
+      Promise.all([getAllFilms(), getAllDiaryEntries()]).then(([films, entries]) => {
         allFilms = films;
-        renderFullPanel(panel, allFilms, true, username, settings, {});
+        allDiaryEntries = entries;
+        renderFullPanel(panel, allFilms, allDiaryEntries, true, username, settings, {});
       });
     },
     onUploadCSV: () => {
       renderOnboarding(panel, {
         onSaveKey: (key) => { settings.tmdb_api_key = key; },
-        onCSVDrop: () => {},
         onEnrich: async (enrichedFilms) => {
           settings.onboarded = true;
           await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);

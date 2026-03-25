@@ -11,15 +11,15 @@ export function computeOverview(films) {
 
   const hours = films.reduce((sum, f) => sum + (f.runtime || 0), 0) / 60;
 
-  const countries = new Set(films.map(f => f.origin_country).filter(Boolean));
+  const countries = new Set(films.flatMap(f => f.origin_country || []).filter(Boolean));
 
   const currentYear = new Date().getFullYear();
   const thisYear = films.filter(f => {
-    if (!f.watched_date) return false;
-    return parseInt(f.watched_date.substring(0, 4), 10) === currentYear;
+    if (!f.last_watched) return false;
+    return parseInt(f.last_watched.substring(0, 4), 10) === currentYear;
   }).length;
 
-  const rewatches = films.filter(f => f.rewatch).length;
+  const rewatches = films.filter(f => (f.rewatch_count || 0) > 0).length;
 
   return {
     total,
@@ -118,7 +118,7 @@ export function computeGenreBreakdown(films) {
 
   for (const film of films) {
     if (!film.genres || !film.genres.length) continue;
-    const watchedYear = film.watched_date ? parseInt(film.watched_date.substring(0, 4), 10) : null;
+    const watchedYear = film.last_watched ? parseInt(film.last_watched.substring(0, 4), 10) : null;
 
     for (const genre of film.genres) {
       totals[genre] = (totals[genre] || 0) + 1;
@@ -190,8 +190,8 @@ export function computeRatingVsTmdb(films) {
 export function filterFilms(films, filters = {}) {
   return films.filter(film => {
     if (filters.yearWatched) {
-      if (!film.watched_date) return false;
-      const watchedYear = parseInt(film.watched_date.substring(0, 4), 10);
+      if (!film.last_watched) return false;
+      const watchedYear = parseInt(film.last_watched.substring(0, 4), 10);
       if (watchedYear !== parseInt(filters.yearWatched, 10)) return false;
     }
 

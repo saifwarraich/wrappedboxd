@@ -122,16 +122,88 @@ const MODAL_STYLES = `
   }
 `;
 
+const EXTENDED_STYLES = `
+  .lbs-diary-date {
+    font-size: 11px;
+    color: #678;
+    margin-top: 2px;
+  }
+
+  .lbs-rewatch-badge {
+    font-size: 10px;
+    color: #ff8000;
+    margin-left: 6px;
+    font-weight: 600;
+  }
+
+  .lbs-country-row {
+    padding: 10px 20px;
+    border-bottom: 1px solid #1c2228;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .lbs-country-row:hover { background: #242c36; }
+
+  .lbs-country-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .lbs-country-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .lbs-country-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #678;
+    font-size: 12px;
+  }
+
+  .lbs-country-chevron {
+    font-size: 10px;
+    transition: transform 0.15s;
+  }
+
+  .lbs-country-films {
+    display: none;
+    padding: 4px 0 4px 12px;
+  }
+
+  .lbs-country-films.open { display: block; }
+
+  .lbs-country-film-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .lbs-country-film-item:hover { background: #1c2228; }
+  .lbs-country-film-item:hover .lbs-film-title { color: #00e054; }
+`;
+
 let styleInjected = false;
 
-export function openFilmModal(shadowRoot, title, films) {
-  // Inject styles once into the shadow root
+function ensureStyles(shadowRoot) {
   if (!styleInjected) {
     const style = document.createElement('style');
-    style.textContent = MODAL_STYLES;
+    style.textContent = MODAL_STYLES + EXTENDED_STYLES;
     shadowRoot.appendChild(style);
     styleInjected = true;
   }
+}
+
+
+export function openFilmModal(shadowRoot, title, films) {
+  ensureStyles(shadowRoot);
 
   // Remove any existing modal
   shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();
@@ -141,7 +213,7 @@ export function openFilmModal(shadowRoot, title, films) {
 
   const sorted = [...films].sort((a, b) => {
     if (b.rating !== a.rating) return (b.rating || 0) - (a.rating || 0);
-    return (b.watched_date || '').localeCompare(a.watched_date || '');
+    return (b.last_watched || '').localeCompare(a.last_watched || '');
   });
 
   backdrop.innerHTML = `
@@ -162,7 +234,7 @@ export function openFilmModal(shadowRoot, title, films) {
             }
             <div class="lbs-film-info">
               <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
-              <div class="lbs-film-meta">${f.watched_date || ''}</div>
+              <div class="lbs-film-meta">${f.last_watched || ''}</div>
             </div>
             <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
           </div>
@@ -178,6 +250,135 @@ export function openFilmModal(shadowRoot, title, films) {
 
   backdrop.querySelectorAll('.lbs-film-row--link').forEach(row => {
     row.addEventListener('click', () => {
+      window.open(row.dataset.uri, '_blank', 'noopener');
+    });
+  });
+
+  shadowRoot.appendChild(backdrop);
+}
+
+export function openDiaryModal(shadowRoot, diaryEntries, filmsMap) {
+  ensureStyles(shadowRoot);
+  shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();
+
+  const sorted = [...diaryEntries].sort((a, b) =>
+    (b.watched_date || '').localeCompare(a.watched_date || '')
+  );
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'lbs-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="lbs-modal">
+      <div class="lbs-modal-header">
+        <div class="lbs-modal-title">
+          Films Logged
+          <span class="lbs-modal-count">${sorted.length} entr${sorted.length !== 1 ? 'ies' : 'y'}</span>
+        </div>
+        <button class="lbs-modal-close">✕</button>
+      </div>
+      <div class="lbs-modal-body">
+        ${sorted.map(e => {
+          const film = filmsMap.get(e.letterboxd_id) || {};
+          return `
+            <div class="lbs-film-row ${film.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${film.letterboxd_uri ? `data-uri="${film.letterboxd_uri}"` : ''}>
+              ${film.poster
+                ? `<img class="lbs-film-poster" src="${film.poster}" alt="${film.name || ''}" loading="lazy">`
+                : `<div class="lbs-film-poster-placeholder"></div>`
+              }
+              <div class="lbs-film-info">
+                <div class="lbs-film-title">
+                  ${film.name || e.letterboxd_id}${film.year ? ` <span style="color:#678;font-weight:400">${film.year}</span>` : ''}
+                  ${e.rewatch ? '<span class="lbs-rewatch-badge">↩ rewatch</span>' : ''}
+                </div>
+                <div class="lbs-diary-date">${e.watched_date || ''}</div>
+              </div>
+              <div class="lbs-film-rating">${e.rating ? '★ ' + e.rating.toFixed(1) : '—'}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('.lbs-modal-close').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelectorAll('.lbs-film-row--link').forEach(row => {
+    row.addEventListener('click', () => window.open(row.dataset.uri, '_blank', 'noopener'));
+  });
+  shadowRoot.appendChild(backdrop);
+}
+
+export function openCountriesModal(shadowRoot, films) {
+  ensureStyles(shadowRoot);
+  shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();
+
+  // Group by country — a film with multiple countries appears under each
+  const countryMap = new Map();
+  for (const film of films) {
+    for (const country of (film.origin_country || [])) {
+      if (!countryMap.has(country)) countryMap.set(country, []);
+      countryMap.get(country).push(film);
+    }
+  }
+  const countries = [...countryMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'lbs-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="lbs-modal">
+      <div class="lbs-modal-header">
+        <div class="lbs-modal-title">
+          Countries
+          <span class="lbs-modal-count">${countries.length} countr${countries.length !== 1 ? 'ies' : 'y'}</span>
+        </div>
+        <button class="lbs-modal-close">✕</button>
+      </div>
+      <div class="lbs-modal-body">
+        ${countries.map(([code, countryFilms], i) => `
+          <div class="lbs-country-row" data-idx="${i}">
+            <div class="lbs-country-header">
+              <span class="lbs-country-name">${code}</span>
+              <span class="lbs-country-right">
+                <span>${countryFilms.length} film${countryFilms.length !== 1 ? 's' : ''}</span>
+                <span class="lbs-country-chevron">▶</span>
+              </span>
+            </div>
+            <div class="lbs-country-films" id="lbs-cf-${i}">
+              ${[...countryFilms].sort((a, b) => (b.rating || 0) - (a.rating || 0)).map(f => `
+                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${f.letterboxd_uri}"` : ''}>
+                  ${f.poster
+                    ? `<img class="lbs-film-poster" src="${f.poster}" alt="${f.name}" loading="lazy">`
+                    : `<div class="lbs-film-poster-placeholder"></div>`
+                  }
+                  <div class="lbs-film-info">
+                    <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
+                  </div>
+                  <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('.lbs-modal-close').addEventListener('click', () => backdrop.remove());
+
+  backdrop.querySelectorAll('.lbs-country-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const list = row.querySelector('.lbs-country-films');
+      const chevron = row.querySelector('.lbs-country-chevron');
+      const open = list.classList.toggle('open');
+      chevron.style.transform = open ? 'rotate(90deg)' : '';
+    });
+  });
+
+  backdrop.querySelectorAll('.lbs-film-row--link').forEach(row => {
+    row.addEventListener('click', e => {
+      e.stopPropagation();
       window.open(row.dataset.uri, '_blank', 'noopener');
     });
   });

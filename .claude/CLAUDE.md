@@ -59,18 +59,26 @@ letterboxd-extension/
 
 ## Data Schema
 
-### Film object (stored in IndexedDB)
+Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (one record per watch event).
+
+### Film object — `films` store (keyPath: `letterboxd_id`)
 
 ```js
 {
-  // from CSV
+  // identity
   letterboxd_id: "fight-club-1999",   // slug — unique key
   name: "Fight Club",
   year: 1999,
-  watched_date: "2023-11-04",          // ISO string
-  rating: 4.5,                         // 0.5–5, null if not rated
-  rewatch: false,
-  review: "",                          // may be empty
+  decade: 1990,                        // year rounded down to decade
+  letterboxd_uri: "https://boxd.it/29Zs",
+
+  // from CSV (merged across all uploaded files)
+  rating: 4.5,                         // latest rating (0.5–5), null if never rated
+  first_watched: "2020-01-01",         // ISO date of first diary entry
+  last_watched: "2023-11-04",          // ISO date of most recent diary entry
+  rewatch_count: 2,                    // number of rewatch diary entries
+  tags: ["favorites"],                 // union of tags across all diary entries
+  sources: ["diary", "ratings"],       // which CSV files contributed data
 
   // from TMDB
   tmdb_id: 550,
@@ -88,11 +96,30 @@ letterboxd-extension/
   tmdb_rating: 8.4,
   runtime: 139,
   origin_country: "US",
-  decade: 1990,                        // year rounded down to decade
   enriched: true,                      // false if TMDB fetch failed/pending
   enriched_at: "2024-03-01T12:00:00Z"
 }
 ```
+
+### DiaryEntry object — `diary_entries` store (keyPath: `id`)
+
+```js
+{
+  id: "fight-club-1999_2023-11-04",   // letterboxd_id + "_" + watched_date
+  letterboxd_id: "fight-club-1999",   // FK → films
+  watched_date: "2023-11-04",
+  rating: 4.5,                         // rating given on this specific watch
+  rewatch: true,
+  tags: ["favorites"],
+  source: "diary",                     // "diary" | "rss"
+}
+```
+
+**Merge rules** (applied by `upsertFilm` when multiple CSV files are uploaded):
+- `rating`: latest rating wins (compared by `last_watched` date)
+- `first_watched` / `last_watched`: keep earliest / latest across all sources
+- `rewatch_count`: keep max
+- `tags` / `sources`: union
 
 ### Settings (chrome.storage.local)
 
@@ -166,44 +193,58 @@ export default defineConfig({
 
 ## src/lib/db.js
 
-Thin IndexedDB wrapper. Export these functions:
+Thin IndexedDB wrapper. Two stores: `films` and `diary_entries`.
 
 ```js
-initDB()                          // opens/upgrades DB, creates 'films' store with keyPath 'letterboxd_id'
-getAllFilms()                      // returns all Film objects as array
-getFilm(letterboxd_id)            // returns one Film
-upsertFilm(film)                  // insert or update by letterboxd_id
-upsertFilms(films[])              // bulk upsert
-getFilmCount()                    // integer
-getLastWatchedDate()              // ISO string of most recent watched_date
-clearAllFilms()                   // nuclear reset
+// DB
+initDB()                                  // opens/upgrades DB (version 2), creates both stores
+
+// Films
+getAllFilms()                             // returns all Film objects as array
+getFilm(letterboxd_id)                   // returns one Film
+upsertFilm(film)                         // merge-upsert (see merge rules in Data Schema)
+upsertFilms(films[])                     // sequential merge-upsert for each film
+getFilmCount()                           // integer
+
+// Diary entries
+getAllDiaryEntries()                      // returns all DiaryEntry objects as array
+getDiaryEntriesForFilm(letterboxd_id)    // returns DiaryEntry[] for one film
+upsertDiaryEntry(entry)                  // insert or overwrite by id
+upsertDiaryEntries(entries[])            // bulk upsert in single transaction
+
+// Shared
+getLastWatchedDate()                     // most recent watched_date across all diary_entries
+clearAll()                               // clears both stores
 ```
 
 DB name: `letterboxd_stats_v1`
-Store name: `films`
-Indices: `watched_date`, `director`, `enriched`
+Stores: `films` (indices: `last_watched`, `director`, `enriched`), `diary_entries` (indices: `letterboxd_id`, `watched_date`)
 
 ---
 
 ## src/lib/csv.js
 
-Parse the Letterboxd `diary.csv` export.
+Parses any Letterboxd CSV export. Auto-detects file type from headers.
 
-CSV columns (Letterboxd format):
-```
-Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
-```
+Supported files:
+| File | Columns | Notes |
+|---|---|---|
+| `diary.csv` | Date, Name, Year, Letterboxd URI, Rating, Rewatch, Tags, Watched Date | Multiple rows per film (rewatches) |
+| `ratings.csv` | Date, Name, Year, Letterboxd URI, Rating | One row per rated film |
+| `watched.csv` | Date, Name, Year, Letterboxd URI | One row per watched film (includes unrated) |
 
 Export:
 ```js
-parseCSV(csvText)  // returns Film[] with CSV fields filled, TMDB fields null/empty, enriched: false
+parseLetterboxdCSV(csvText)
+// returns { films: Film[], diaryEntries: DiaryEntry[] }
+// diaryEntries is empty for ratings.csv and watched.csv
 ```
 
-- `letterboxd_id` = slug extracted from the URI column: `https://boxd.it/xxxx` — use the film name + year as fallback slug if URI parsing fails: `"fight-club-1999"`
-- `rating` = convert "½★★★" style OR decimal "3.5" — Letterboxd exports as decimals (0.5 increments)
-- `rewatch` = "Yes" → true
-- Skip header row
-- Handle missing Rating gracefully (null)
+Detection logic: if headers contain `Rewatch` → diary; if headers contain `Rating` but not `Rewatch` → ratings; otherwise → watched.
+
+- `letterboxd_id` = slug from URI path (`https://boxd.it/xxxx`), fallback to `"fight-club-1999"` slugify
+- `rating` = decimal `"4.5"` or star `"★★★½"` format, null if missing
+- User may upload any subset of the three files; all are optional
 
 ---
 

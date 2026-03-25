@@ -77,9 +77,9 @@ export async function enrichFilm(film, apiKey) {
     const cast = extractCast(details.credits);
     const keywords = extractKeywords(details.keywords);
     const genres = (details.genres || []).map(g => g.name);
-    const originCountry = details.production_countries && details.production_countries.length > 0
-      ? details.production_countries[0].iso_3166_1
-      : null;
+    const originCountry = details.production_countries
+      ? details.production_countries.map(c => c.name).filter(Boolean)
+      : [];
 
     return {
       ...film,

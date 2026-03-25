@@ -6,10 +6,10 @@ import { renderThemes } from './sections/themes.js';
 import { renderDecades } from './sections/decades.js';
 import { renderRatings } from './sections/ratings.js';
 import { filterFilms } from '../lib/stats.js';
-import { syncRSS, fetchRSS } from '../lib/rss.js';
-import { getAllFilms, upsertFilms } from '../lib/db.js';
+import { syncRSS } from '../lib/rss.js';
+import { getAllFilms, upsertFilms, upsertDiaryEntries } from '../lib/db.js';
 import { enrichFilms } from '../lib/tmdb.js';
-import { parseCSV } from '../lib/csv.js';
+import { parseLetterboxdCSV } from '../lib/csv.js';
 
 const PANEL_STYLES = `
   :host {
@@ -276,6 +276,18 @@ const PANEL_STYLES = `
     gap: 14px;
   }
 
+  .lbs-clickable {
+    cursor: pointer;
+  }
+
+  .lbs-clickable:hover .lbs-circle {
+    filter: brightness(1.15);
+  }
+
+  .lbs-clickable:hover .lbs-extra-value {
+    color: var(--lbs-green);
+  }
+
   .lbs-circle {
     width: 84px;
     height: 84px;
@@ -310,8 +322,9 @@ const PANEL_STYLES = `
 
   .lbs-extra-stat {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
   }
 
   .lbs-extra-value {
@@ -735,8 +748,38 @@ const PANEL_STYLES = `
   .lbs-onboarding-step h3 {
     font-size: 14px;
     color: var(--lbs-green);
-    margin: 0 0 10px;
+    margin: 0 0 6px;
   }
+
+  .lbs-step-label {
+    font-size: 11px;
+    color: var(--lbs-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .lbs-step-desc {
+    font-size: 12px;
+    color: var(--lbs-text);
+    margin: 0 0 14px;
+    line-height: 1.5;
+  }
+
+  .lbs-step-ok {
+    font-size: 12px;
+    color: var(--lbs-green);
+    margin-top: 8px;
+  }
+
+  .lbs-btn--ghost {
+    background: transparent;
+    border: 1px solid #2a3440;
+    color: var(--lbs-text-muted);
+    font-size: 12px;
+  }
+
+  .lbs-btn--ghost:hover { border-color: var(--lbs-text); color: var(--lbs-text); }
 
   .lbs-input-row {
     display: flex;
@@ -921,7 +964,7 @@ function getFilterOptions(films) {
   const genres = new Set();
 
   for (const f of films) {
-    if (f.watched_date) years.add(f.watched_date.substring(0, 4));
+    if (f.last_watched) years.add(f.last_watched.substring(0, 4));
     if (f.decade !== null && f.decade !== undefined) decades.add(f.decade);
     if (f.genres) f.genres.forEach(g => genres.add(g));
   }
@@ -995,129 +1038,234 @@ export function renderErrorState(panel, message) {
   `;
 }
 
-export function renderOnboarding(panel, { onSaveKey, onCSVDrop, onEnrich, onSkip }) {
+export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   panel.innerHTML = `
     <div class="lbs-header">
       <div class="lbs-header-title">Un<span>boxd</span></div>
     </div>
     <div class="lbs-onboarding">
       <h2>Welcome to Unboxd</h2>
-      <p>Get rich stats about your film diary — directors, genres, decades, ratings and more. To get started, provide your TMDB API key and upload your Letterboxd diary export.</p>
+      <p>Get rich stats about your films — directors, genres, decades, ratings and more.</p>
 
-      <div class="lbs-onboarding-step" id="lbs-step-key">
-        <h3>Step 1: TMDB API Key</h3>
-        <div class="lbs-input-row">
-          <input type="text" class="lbs-input" id="lbs-tmdb-key-input" placeholder="Paste your TMDB API key here...">
-          <button class="lbs-btn lbs-btn--green" id="lbs-save-key-btn">Save</button>
+      <div class="lbs-onboarding-steps">
+
+        <!-- Step 1: TMDB key -->
+        <div class="lbs-onboarding-step" id="lbs-step-1">
+          <div class="lbs-step-label">Step 1 of 5</div>
+          <h3>TMDB API Key</h3>
+          <p class="lbs-step-desc">Used to fetch director, cast, genre and poster data for each film. Free to get.</p>
+          <div class="lbs-input-row">
+            <input type="text" class="lbs-input" id="lbs-tmdb-key-input" placeholder="Paste your TMDB API key...">
+            <button class="lbs-btn lbs-btn--green" id="lbs-save-key-btn">Save &amp; Continue</button>
+          </div>
+          <p class="lbs-input-note">Get a free key at <strong>themoviedb.org/settings/api</strong></p>
+          <div id="lbs-key-status"></div>
         </div>
-        <p class="lbs-input-note">
-          Get a free key at <strong>themoviedb.org/settings/api</strong>. Used to fetch director, cast, genre and keyword data.
-        </p>
-        <div id="lbs-key-error"></div>
-      </div>
 
-      <div class="lbs-onboarding-step" id="lbs-step-csv">
-        <h3>Step 2: Upload your Letterboxd diary</h3>
-        <div class="lbs-drop-zone" id="lbs-csv-drop">
-          <div class="lbs-drop-zone-icon">📄</div>
-          <div class="lbs-drop-zone-text">Drop your diary.csv here, or click to browse</div>
-          <div class="lbs-drop-zone-sub">Export from Letterboxd → Settings → Import & Export → Export Your Data</div>
-          <input type="file" accept=".csv" id="lbs-csv-input" style="display:none">
+        <!-- Step 2: watched.csv (required) -->
+        <div class="lbs-onboarding-step hidden" id="lbs-step-2">
+          <div class="lbs-step-label">Step 2 of 5 — Required</div>
+          <h3>Upload watched.csv</h3>
+          <p class="lbs-step-desc">Your complete list of every film you've marked as watched, including unrated ones. This is the base for all your stats.</p>
+          <div class="lbs-drop-zone" id="lbs-drop-2">
+            <div class="lbs-drop-zone-icon">📄</div>
+            <div class="lbs-drop-zone-text">Drop watched.csv here, or click to browse</div>
+            <div class="lbs-drop-zone-sub">Letterboxd → Settings → Import &amp; Export → Export Your Data</div>
+            <input type="file" accept=".csv" id="lbs-input-2" style="display:none">
+          </div>
+          <div id="lbs-status-2"></div>
         </div>
-        <div id="lbs-csv-status"></div>
-      </div>
 
-      <div id="lbs-enrich-section" style="display:none">
-        <div class="lbs-onboarding-step">
-          <h3>Step 3: Enrich with TMDB</h3>
-          <p id="lbs-film-count-text"></p>
-          <button class="lbs-btn lbs-btn--green" id="lbs-enrich-btn">Enrich with TMDB</button>
-          <div id="lbs-progress-wrap" style="display:none">
+        <!-- Step 3: ratings.csv (optional) -->
+        <div class="lbs-onboarding-step hidden" id="lbs-step-3">
+          <div class="lbs-step-label">Step 3 of 5 — Optional</div>
+          <h3>Upload ratings.csv</h3>
+          <p class="lbs-step-desc">Adds your star ratings to the film list. Skip if you didn't rate many films outside the diary.</p>
+          <div class="lbs-drop-zone" id="lbs-drop-3">
+            <div class="lbs-drop-zone-icon">⭐</div>
+            <div class="lbs-drop-zone-text">Drop ratings.csv here, or click to browse</div>
+            <input type="file" accept=".csv" id="lbs-input-3" style="display:none">
+          </div>
+          <div id="lbs-status-3"></div>
+          <button class="lbs-btn lbs-btn--ghost" id="lbs-skip-3" style="margin-top:10px">Skip this step →</button>
+        </div>
+
+        <!-- Step 4: diary.csv (optional) -->
+        <div class="lbs-onboarding-step hidden" id="lbs-step-4">
+          <div class="lbs-step-label">Step 4 of 5 — Optional</div>
+          <h3>Upload diary.csv</h3>
+          <p class="lbs-step-desc">Adds exact watch dates, rewatch history and tags. Enables timeline charts and per-year breakdowns.</p>
+          <div class="lbs-drop-zone" id="lbs-drop-4">
+            <div class="lbs-drop-zone-icon">📅</div>
+            <div class="lbs-drop-zone-text">Drop diary.csv here, or click to browse</div>
+            <input type="file" accept=".csv" id="lbs-input-4" style="display:none">
+          </div>
+          <div id="lbs-status-4"></div>
+          <button class="lbs-btn lbs-btn--ghost" id="lbs-skip-4" style="margin-top:10px">Skip this step →</button>
+        </div>
+
+        <!-- Step 5: Enrich -->
+        <div class="lbs-onboarding-step hidden" id="lbs-step-5">
+          <div class="lbs-step-label">Step 5 of 5</div>
+          <h3>Enrich with TMDB</h3>
+          <p id="lbs-enrich-summary"></p>
+          <button class="lbs-btn lbs-btn--green" id="lbs-enrich-btn">Start Enrichment</button>
+          <div id="lbs-progress-wrap" style="display:none; margin-top:12px">
             <div class="lbs-progress-wrap">
               <div class="lbs-progress-bar" id="lbs-progress-bar"></div>
             </div>
-            <div class="lbs-progress-text" id="lbs-progress-text">Starting enrichment...</div>
+            <div class="lbs-progress-text" id="lbs-progress-text">Starting...</div>
           </div>
           <div id="lbs-enrich-error"></div>
         </div>
+
       </div>
     </div>
   `;
 
-  let parsedFilms = null;
+  // ── State ──────────────────────────────────────────────────────────────────
   let tmdbKey = null;
+  // In-memory merged film map (letterboxd_id → Film) and diary entries
+  const filmsMap = new Map();
+  let allDiaryEntries = [];
 
-  const saveKeyBtn = panel.querySelector('#lbs-save-key-btn');
-  const keyInput = panel.querySelector('#lbs-tmdb-key-input');
-  const keyError = panel.querySelector('#lbs-key-error');
-
-  // Pre-fill saved key
-  chrome.storage.local.get(['tmdb_api_key'], res => {
-    if (res.tmdb_api_key) {
-      keyInput.value = res.tmdb_api_key;
-      tmdbKey = res.tmdb_api_key;
+  function mergeIntoMap(films) {
+    for (const film of films) {
+      if (!filmsMap.has(film.letterboxd_id)) {
+        filmsMap.set(film.letterboxd_id, { ...film });
+        continue;
+      }
+      const existing = filmsMap.get(film.letterboxd_id);
+      // first/last watched
+      if (film.first_watched && (!existing.first_watched || film.first_watched < existing.first_watched))
+        existing.first_watched = film.first_watched;
+      if (film.last_watched && (!existing.last_watched || film.last_watched > existing.last_watched))
+        existing.last_watched = film.last_watched;
+      // latest rating wins
+      if (film.rating !== null && film.rating !== undefined) {
+        const inDate = film.last_watched || '';
+        const exDate = existing.last_watched || '';
+        if (!existing.rating || inDate >= exDate) existing.rating = film.rating;
+      }
+      // rewatch count: max
+      if ((film.rewatch_count || 0) > (existing.rewatch_count || 0))
+        existing.rewatch_count = film.rewatch_count;
+      // tags + sources: union
+      existing.tags = [...new Set([...existing.tags, ...film.tags])];
+      existing.sources = [...new Set([...existing.sources, ...film.sources])];
     }
+  }
+
+  function showStep(n) {
+    [1, 2, 3, 4, 5].forEach(i => {
+      panel.querySelector(`#lbs-step-${i}`).classList.toggle('hidden', i !== n);
+    });
+  }
+
+  function readCSV(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  }
+
+  function bindDropZone(dropId, inputId, onFile) {
+    const drop = panel.querySelector(`#${dropId}`);
+    const input = panel.querySelector(`#${inputId}`);
+    drop.addEventListener('click', () => input.click());
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  }
+
+  // ── Step 1: TMDB key ───────────────────────────────────────────────────────
+  const keyInput = panel.querySelector('#lbs-tmdb-key-input');
+  const keyStatus = panel.querySelector('#lbs-key-status');
+
+  chrome.storage.local.get(['tmdb_api_key'], res => {
+    if (res.tmdb_api_key) { keyInput.value = res.tmdb_api_key; tmdbKey = res.tmdb_api_key; }
   });
 
-  saveKeyBtn.addEventListener('click', () => {
+  panel.querySelector('#lbs-save-key-btn').addEventListener('click', () => {
     const key = keyInput.value.trim();
     if (!key) {
-      keyError.innerHTML = '<div class="lbs-error">Please enter a TMDB API key.</div>';
+      keyStatus.innerHTML = '<div class="lbs-error">Please enter a TMDB API key.</div>';
       return;
     }
     tmdbKey = key;
     chrome.storage.local.set({ tmdb_api_key: key });
-    keyError.innerHTML = '<div style="color: var(--lbs-green); font-size:12px; margin-top:6px">Key saved!</div>';
+    keyStatus.innerHTML = '<div style="color:var(--lbs-green);font-size:12px;margin-top:6px">Key saved!</div>';
     if (typeof onSaveKey === 'function') onSaveKey(key);
+    setTimeout(() => showStep(2), 600);
   });
 
-  // CSV drop zone
-  const dropZone = panel.querySelector('#lbs-csv-drop');
-  const csvInput = panel.querySelector('#lbs-csv-input');
-  const csvStatus = panel.querySelector('#lbs-csv-status');
-  const enrichSection = panel.querySelector('#lbs-enrich-section');
-  const filmCountText = panel.querySelector('#lbs-film-count-text');
-
-  dropZone.addEventListener('click', () => csvInput.click());
-
-  dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
+  // ── Step 2: watched.csv (required) ────────────────────────────────────────
+  bindDropZone('lbs-drop-2', 'lbs-input-2', async file => {
+    const status = panel.querySelector('#lbs-status-2');
+    try {
+      const text = await readCSV(file);
+      const { films } = parseLetterboxdCSV(text);
+      mergeIntoMap(films);
+      status.innerHTML = `<div class="lbs-step-ok">✓ ${films.length} films loaded</div>`;
+      setTimeout(() => showStep(3), 800);
+    } catch (err) {
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+    }
   });
 
-  dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('drag-over');
+  // ── Step 3: ratings.csv (optional) ────────────────────────────────────────
+  bindDropZone('lbs-drop-3', 'lbs-input-3', async file => {
+    const status = panel.querySelector('#lbs-status-3');
+    try {
+      const text = await readCSV(file);
+      const { films } = parseLetterboxdCSV(text);
+      const before = filmsMap.size;
+      mergeIntoMap(films);
+      const added = filmsMap.size - before;
+      const rated = films.filter(f => f.rating !== null).length;
+      status.innerHTML = `<div class="lbs-step-ok">✓ Ratings added for ${rated} films${added ? `, ${added} new films discovered` : ''}</div>`;
+      setTimeout(() => showStep(4), 800);
+    } catch (err) {
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+    }
   });
 
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleCSVFile(file);
+  panel.querySelector('#lbs-skip-3').addEventListener('click', () => showStep(4));
+
+  // ── Step 4: diary.csv (optional) ──────────────────────────────────────────
+  bindDropZone('lbs-drop-4', 'lbs-input-4', async file => {
+    const status = panel.querySelector('#lbs-status-4');
+    try {
+      const text = await readCSV(file);
+      const { films, diaryEntries } = parseLetterboxdCSV(text);
+      mergeIntoMap(films);
+      allDiaryEntries = allDiaryEntries.concat(diaryEntries);
+      status.innerHTML = `<div class="lbs-step-ok">✓ Watch history for ${films.length} films, ${diaryEntries.length} diary entries</div>`;
+      setTimeout(() => showStep(5), 800);
+    } catch (err) {
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+    }
   });
 
-  csvInput.addEventListener('change', () => {
-    if (csvInput.files[0]) handleCSVFile(csvInput.files[0]);
-  });
+  panel.querySelector('#lbs-skip-4').addEventListener('click', () => showStep(5));
 
-  function handleCSVFile(file) {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target.result;
-      try {
-        parsedFilms = parseCSV(text);
-        csvStatus.innerHTML = `<div style="color: var(--lbs-green); font-size:12px; margin-top:8px">Parsed ${parsedFilms.length} diary entries.</div>`;
-        filmCountText.textContent = `Ready to enrich ${parsedFilms.length} films with TMDB data. This may take a few minutes.`;
-        enrichSection.style.display = 'block';
-        if (typeof onCSVDrop === 'function') onCSVDrop(parsedFilms);
-      } catch (err) {
-        csvStatus.innerHTML = `<div class="lbs-error">Failed to parse CSV: ${err.message}</div>`;
-      }
-    };
-    reader.readAsText(file);
-  }
+  // ── Step 5: Enrich ─────────────────────────────────────────────────────────
+  // Update summary when step 5 becomes visible via MutationObserver
+  const step5 = panel.querySelector('#lbs-step-5');
+  new MutationObserver(() => {
+    if (!step5.classList.contains('hidden')) {
+      panel.querySelector('#lbs-enrich-summary').textContent =
+        `Ready to enrich ${filmsMap.size} films with director, cast, genre and keyword data. This may take a few minutes.`;
+    }
+  }).observe(step5, { attributeFilter: ['class'] });
 
-  // Enrich button
   const enrichBtn = panel.querySelector('#lbs-enrich-btn');
   const progressWrap = panel.querySelector('#lbs-progress-wrap');
   const progressBar = panel.querySelector('#lbs-progress-bar');
@@ -1125,13 +1273,9 @@ export function renderOnboarding(panel, { onSaveKey, onCSVDrop, onEnrich, onSkip
   const enrichError = panel.querySelector('#lbs-enrich-error');
 
   enrichBtn.addEventListener('click', async () => {
-    if (!parsedFilms) {
-      enrichError.innerHTML = '<div class="lbs-error">Please upload a CSV first.</div>';
-      return;
-    }
-    const key = tmdbKey || keyInput.value.trim();
+    const key = tmdbKey;
     if (!key) {
-      enrichError.innerHTML = '<div class="lbs-error">Please save your TMDB API key first.</div>';
+      enrichError.innerHTML = '<div class="lbs-error">TMDB API key missing — go back to step 1.</div>';
       return;
     }
 
@@ -1141,21 +1285,22 @@ export function renderOnboarding(panel, { onSaveKey, onCSVDrop, onEnrich, onSkip
     enrichError.innerHTML = '';
 
     try {
-      const enriched = await enrichFilms(parsedFilms, key, (done, total) => {
-        const pct = Math.round((done / total) * 100);
-        progressBar.style.width = pct + '%';
+      const films = [...filmsMap.values()];
+      const enriched = await enrichFilms(films, key, (done, total) => {
+        progressBar.style.width = Math.round((done / total) * 100) + '%';
         progressText.textContent = `Enriching ${done} / ${total} films...`;
       });
 
       await upsertFilms(enriched);
+      await upsertDiaryEntries(allDiaryEntries);
       await chrome.storage.local.set({
         onboarded: true,
         last_full_sync: new Date().toISOString(),
         tmdb_api_key: key,
       });
 
-      progressText.textContent = 'Done! Loading your stats...';
       progressBar.style.width = '100%';
+      progressText.textContent = 'Done! Loading your stats...';
 
       if (typeof onEnrich === 'function') onEnrich(enriched);
     } catch (err) {
@@ -1166,11 +1311,22 @@ export function renderOnboarding(panel, { onSaveKey, onCSVDrop, onEnrich, onSkip
   });
 }
 
-export function renderFullPanel(panel, allFilms, isOwnProfile, username, settings, callbacks = {}) {
+export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, username, settings, callbacks = {}) {
   const tabs = isOwnProfile ? OWN_TABS : OTHER_TABS;
   let activeTab = tabs[0].id;
   let filters = {};
   let filteredFilms = allFilms;
+
+  function filteredDiaryEntries() {
+    const filteredIds = new Set(filteredFilms.map(f => f.letterboxd_id));
+    return allDiaryEntries.filter(e => {
+      if (!filteredIds.has(e.letterboxd_id)) return false;
+      if (filters.yearWatched) {
+        return e.watched_date && e.watched_date.startsWith(String(filters.yearWatched));
+      }
+      return true;
+    });
+  }
   let filtersVisible = false;
   let settingsVisible = false;
 
@@ -1189,14 +1345,40 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
           <div class="lbs-input-note">Get a free key at <strong>themoviedb.org/settings/api</strong></div>
         </div>
         <div class="lbs-settings-block">
-          <h4>Update Diary CSV</h4>
-          <div class="lbs-settings-drop-zone" id="lbs-settings-drop-zone">
-            Drop diary.csv here or click to browse
-            <input type="file" accept=".csv" id="lbs-settings-csv-input" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+          <h4>Update Film Data</h4>
+          <p class="lbs-input-note" style="margin-bottom:10px">Upload new exports to add or update your film list. Files are merged — you won't lose existing data.</p>
+
+          <div id="lbs-su-step-1">
+            <div class="lbs-step-label">Step 1 — Required</div>
+            <div class="lbs-settings-drop-zone" id="lbs-su-drop-1">
+              Drop watched.csv here or click to browse
+              <input type="file" accept=".csv" id="lbs-su-input-1" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+            </div>
+            <div id="lbs-su-status-1"></div>
           </div>
-          <div class="lbs-settings-status" id="lbs-settings-csv-status"></div>
-          <div id="lbs-settings-enrich-row" style="display:none">
-            <button class="lbs-btn lbs-btn--green" id="lbs-settings-enrich-btn" style="margin-top:8px">Enrich with TMDB</button>
+
+          <div id="lbs-su-step-2" class="hidden" style="margin-top:10px">
+            <div class="lbs-step-label">Step 2 — Optional</div>
+            <div class="lbs-settings-drop-zone" id="lbs-su-drop-2">
+              Drop ratings.csv here or click to browse
+              <input type="file" accept=".csv" id="lbs-su-input-2" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+            </div>
+            <div id="lbs-su-status-2"></div>
+            <button class="lbs-btn lbs-btn--ghost" id="lbs-su-skip-2" style="margin-top:6px;font-size:11px">Skip →</button>
+          </div>
+
+          <div id="lbs-su-step-3" class="hidden" style="margin-top:10px">
+            <div class="lbs-step-label">Step 3 — Optional</div>
+            <div class="lbs-settings-drop-zone" id="lbs-su-drop-3">
+              Drop diary.csv here or click to browse
+              <input type="file" accept=".csv" id="lbs-su-input-3" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
+            </div>
+            <div id="lbs-su-status-3"></div>
+            <button class="lbs-btn lbs-btn--ghost" id="lbs-su-skip-3" style="margin-top:6px;font-size:11px">Skip →</button>
+          </div>
+
+          <div id="lbs-su-step-4" class="hidden" style="margin-top:10px">
+            <button class="lbs-btn lbs-btn--green" id="lbs-settings-enrich-btn">Enrich with TMDB</button>
             <div class="lbs-progress-wrap" id="lbs-settings-progress-wrap" style="display:none; margin-top:8px">
               <div class="lbs-progress-bar" id="lbs-settings-progress-bar"></div>
             </div>
@@ -1260,7 +1442,7 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
   function renderActiveSection(container) {
     switch (activeTab) {
       case 'overview':
-        renderOverview(filteredFilms, container);
+        renderOverview(filteredFilms, filteredDiaryEntries(), container);
         break;
       case 'directors':
         renderDirectors(filteredFilms, container);
@@ -1421,48 +1603,106 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
         });
       }
 
-      // Settings: CSV upload
-      const settingsDropZone = panel.querySelector('#lbs-settings-drop-zone');
-      const settingsCsvInput = panel.querySelector('#lbs-settings-csv-input');
-      const settingsCsvStatus = panel.querySelector('#lbs-settings-csv-status');
-      const settingsEnrichRow = panel.querySelector('#lbs-settings-enrich-row');
+      // Settings: multi-step CSV upload
+      const suFilmsMap = new Map();
+      let suDiaryEntries = [];
+
+      function suReadCSV(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsText(file);
+        });
+      }
+
+      function suMerge(films) {
+        for (const film of films) {
+          if (!suFilmsMap.has(film.letterboxd_id)) {
+            suFilmsMap.set(film.letterboxd_id, { ...film });
+            continue;
+          }
+          const ex = suFilmsMap.get(film.letterboxd_id);
+          if (film.first_watched && (!ex.first_watched || film.first_watched < ex.first_watched)) ex.first_watched = film.first_watched;
+          if (film.last_watched && (!ex.last_watched || film.last_watched > ex.last_watched)) ex.last_watched = film.last_watched;
+          if (film.rating !== null && film.rating !== undefined) {
+            if (!ex.rating || (film.last_watched || '') >= (ex.last_watched || '')) ex.rating = film.rating;
+          }
+          if ((film.rewatch_count || 0) > (ex.rewatch_count || 0)) ex.rewatch_count = film.rewatch_count;
+          ex.tags = [...new Set([...ex.tags, ...film.tags])];
+          ex.sources = [...new Set([...ex.sources, ...film.sources])];
+        }
+      }
+
+      function suShowStep(n) {
+        [1, 2, 3, 4].forEach(i => {
+          panel.querySelector(`#lbs-su-step-${i}`).classList.toggle('hidden', i !== n);
+        });
+      }
+
+      function suBindDrop(dropId, inputId, onFile) {
+        const drop = panel.querySelector(`#${dropId}`);
+        const input = panel.querySelector(`#${inputId}`);
+        if (!drop) return;
+        drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+        drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+        drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-over'); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
+        input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+      }
+
+      // Step 1: watched.csv
+      suBindDrop('lbs-su-drop-1', 'lbs-su-input-1', async file => {
+        const status = panel.querySelector('#lbs-su-status-1');
+        try {
+          const { films } = parseLetterboxdCSV(await suReadCSV(file));
+          suMerge(films);
+          status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films loaded</span>`;
+          setTimeout(() => suShowStep(2), 800);
+        } catch (err) {
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+        }
+      });
+
+      // Step 2: ratings.csv
+      suBindDrop('lbs-su-drop-2', 'lbs-su-input-2', async file => {
+        const status = panel.querySelector('#lbs-su-status-2');
+        try {
+          const { films } = parseLetterboxdCSV(await suReadCSV(file));
+          const before = suFilmsMap.size;
+          suMerge(films);
+          const rated = films.filter(f => f.rating !== null).length;
+          const added = suFilmsMap.size - before;
+          status.innerHTML = `<span class="lbs-step-ok">✓ Ratings for ${rated} films${added ? `, ${added} new` : ''}</span>`;
+          setTimeout(() => suShowStep(3), 800);
+        } catch (err) {
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+        }
+      });
+      panel.querySelector('#lbs-su-skip-2').addEventListener('click', () => suShowStep(3));
+
+      // Step 3: diary.csv
+      suBindDrop('lbs-su-drop-3', 'lbs-su-input-3', async file => {
+        const status = panel.querySelector('#lbs-su-status-3');
+        try {
+          const { films, diaryEntries } = parseLetterboxdCSV(await suReadCSV(file));
+          suMerge(films);
+          suDiaryEntries = suDiaryEntries.concat(diaryEntries);
+          status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films, ${diaryEntries.length} diary entries</span>`;
+          setTimeout(() => suShowStep(4), 800);
+        } catch (err) {
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+        }
+      });
+      panel.querySelector('#lbs-su-skip-3').addEventListener('click', () => suShowStep(4));
+
+      // Step 4: enrich
       const settingsEnrichBtn = panel.querySelector('#lbs-settings-enrich-btn');
       const settingsProgressWrap = panel.querySelector('#lbs-settings-progress-wrap');
       const settingsProgressBar = panel.querySelector('#lbs-settings-progress-bar');
       const settingsEnrichStatus = panel.querySelector('#lbs-settings-enrich-status');
 
-      let settingsParsedFilms = null;
-
-      function handleSettingsCSV(file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-          try {
-            settingsParsedFilms = parseCSV(e.target.result);
-            settingsCsvStatus.innerHTML = `<span style="color:var(--lbs-green)">${settingsParsedFilms.length} entries parsed.</span>`;
-            settingsEnrichRow.style.display = 'block';
-          } catch (err) {
-            settingsCsvStatus.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
-          }
-        };
-        reader.readAsText(file);
-      }
-
-      if (settingsDropZone) {
-        settingsDropZone.addEventListener('dragover', e => { e.preventDefault(); settingsDropZone.classList.add('drag-over'); });
-        settingsDropZone.addEventListener('dragleave', () => settingsDropZone.classList.remove('drag-over'));
-        settingsDropZone.addEventListener('drop', e => {
-          e.preventDefault();
-          settingsDropZone.classList.remove('drag-over');
-          if (e.dataTransfer.files[0]) handleSettingsCSV(e.dataTransfer.files[0]);
-        });
-        settingsCsvInput.addEventListener('change', () => {
-          if (settingsCsvInput.files[0]) handleSettingsCSV(settingsCsvInput.files[0]);
-        });
-      }
-
       if (settingsEnrichBtn) {
         settingsEnrichBtn.addEventListener('click', async () => {
-          if (!settingsParsedFilms) return;
           const { tmdb_api_key } = await chrome.storage.local.get(['tmdb_api_key']);
           if (!tmdb_api_key) {
             settingsEnrichStatus.innerHTML = '<span style="color:#e74c3c">Save your TMDB API key first.</span>';
@@ -1473,11 +1713,12 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
           settingsProgressWrap.style.display = 'block';
           settingsEnrichStatus.innerHTML = '';
           try {
-            const enriched = await enrichFilms(settingsParsedFilms, tmdb_api_key, (done, total) => {
+            const enriched = await enrichFilms([...suFilmsMap.values()], tmdb_api_key, (done, total) => {
               settingsProgressBar.style.width = Math.round((done / total) * 100) + '%';
               settingsEnrichStatus.innerHTML = `<span style="color:var(--lbs-text-muted)">${done} / ${total}</span>`;
             });
             await upsertFilms(enriched);
+            await upsertDiaryEntries(suDiaryEntries);
             await chrome.storage.local.set({ onboarded: true, last_full_sync: new Date().toISOString() });
             settingsEnrichStatus.innerHTML = '<span style="color:var(--lbs-green)">Done! Reloading stats...</span>';
             const refreshed = await getAllFilms();

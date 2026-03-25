@@ -148,7 +148,7 @@ export function renderGenres(films, container) {
           const title = `${genre} — ${year}`;
           const genreYearFilms = films.filter(f =>
             f.genres && f.genres.includes(genre) &&
-            f.watched_date && f.watched_date.startsWith(String(year))
+            f.last_watched && f.last_watched.startsWith(String(year))
           );
           openFilmModal(getShadowRoot(container), title, genreYearFilms);
         },

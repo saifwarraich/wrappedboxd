@@ -1,4 +1,4 @@
-import { getLastWatchedDate, upsertFilms, getFilm } from './db.js';
+import { getLastWatchedDate, upsertFilms, upsertDiaryEntries, getFilm } from './db.js';
 import { enrichFilms } from './tmdb.js';
 
 const RSS_BASE = 'https://letterboxd.com';
@@ -17,22 +17,6 @@ function parseRSSTitle(title) {
   return { name: namePart.trim(), year: null };
 }
 
-function extractSlugFromLink(link) {
-  if (!link) return null;
-  try {
-    const url = new URL(link);
-    const parts = url.pathname.split('/').filter(Boolean);
-    // letterboxd.com/username/films/diary/for/YYYY/MM/DD/diary-entry-slug/
-    // or letterboxd.com/film/slug/
-    if (parts.length >= 2) {
-      return parts[parts.length - 1] || parts[parts.length - 2];
-    }
-  } catch (e) {
-    // ignore
-  }
-  return null;
-}
-
 function slugify(name, year) {
   const slug = (name || '')
     .toLowerCase()
@@ -43,13 +27,10 @@ function slugify(name, year) {
 }
 
 function getTagText(item, tagName) {
-  // Handle both namespaced and non-namespaced
   const els = item.getElementsByTagNameNS('https://letterboxd.com', tagName);
   if (els.length > 0) return els[0].textContent.trim();
-  // Try without namespace
   const els2 = item.getElementsByTagName(tagName);
   if (els2.length > 0) return els2[0].textContent.trim();
-  // Try with letterboxd: prefix
   const els3 = item.getElementsByTagName(`letterboxd:${tagName}`);
   if (els3.length > 0) return els3[0].textContent.trim();
   return null;
@@ -77,19 +58,23 @@ function parseRSSItem(item) {
     year = parsed.year;
   }
 
-  const slug = extractSlugFromLink(link) || slugify(name, year);
+  // Always use name+year slugify — same canonical ID as csv.js
+  const letterboxd_id = slugify(name, year);
   const rating = memberRating ? parseFloat(memberRating) : null;
-  const decade = year ? Math.floor(year / 10) * 10 : null;
+  const isRewatch = rewatch && rewatch.toLowerCase() === 'yes';
 
-  return {
-    letterboxd_id: slug,
+  const film = {
+    letterboxd_id,
     name,
     year,
-    watched_date: watchedDate || null,
     rating: (!isNaN(rating) && rating !== null) ? rating : null,
-    rewatch: rewatch && rewatch.toLowerCase() === 'yes',
-    review: '',
+    first_watched: watchedDate || null,
+    last_watched: watchedDate || null,
+    rewatch_count: isRewatch ? 1 : 0,
+    tags: [],
+    sources: ['rss'],
     letterboxd_uri: link || null,
+    decade: year ? Math.floor(year / 10) * 10 : null,
     tmdb_id: null,
     genres: [],
     director: null,
@@ -101,10 +86,21 @@ function parseRSSItem(item) {
     tmdb_rating: null,
     runtime: null,
     origin_country: null,
-    decade,
     enriched: false,
     enriched_at: null,
   };
+
+  const diaryEntry = watchedDate ? {
+    id: `${letterboxd_id}_${watchedDate}`,
+    letterboxd_id,
+    watched_date: watchedDate,
+    rating: film.rating,
+    rewatch: isRewatch,
+    tags: [],
+    source: 'rss',
+  } : null;
+
+  return { film, diaryEntry };
 }
 
 export async function fetchRSS(username) {
@@ -125,44 +121,52 @@ export async function fetchRSS(username) {
   const films = [];
 
   for (let i = 0; i < items.length; i++) {
-    const film = parseRSSItem(items[i]);
-    if (film.name) {
-      films.push(film);
-    }
+    const { film } = parseRSSItem(items[i]);
+    if (film.name) films.push(film);
   }
 
   return films;
 }
 
 export async function syncRSS(username, apiKey) {
-  let rssFilms;
+  let rssItems;
   try {
-    rssFilms = await fetchRSS(username);
+    const url = `${RSS_BASE}/${username}/rss/`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`RSS fetch failed: ${response.status}`);
+    const text = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'application/xml');
+    const items = doc.getElementsByTagName('item');
+    rssItems = Array.from(items)
+      .map(item => parseRSSItem(item))
+      .filter(({ film }) => film.name);
   } catch (err) {
     console.warn('[LBS] syncRSS: fetch failed', err);
     return { added: 0 };
   }
 
-  if (!rssFilms.length) return { added: 0 };
+  if (!rssItems.length) return { added: 0 };
 
   const lastWatched = await getLastWatchedDate();
 
-  // Split into new, existing-unenriched, and existing-enriched films
   const newFilms = [];
+  const newDiaryEntries = [];
   const unenrichedFilms = [];
   const enrichedFilms = [];
 
-  for (const f of rssFilms) {
-    const inDb = await getFilm(f.letterboxd_id);
+  for (const { film, diaryEntry } of rssItems) {
+    const inDb = await getFilm(film.letterboxd_id);
     if (inDb) {
-      const merged = { ...f, ...inDb, letterboxd_uri: inDb.letterboxd_uri || f.letterboxd_uri };
+      const merged = { ...film, ...inDb, letterboxd_uri: inDb.letterboxd_uri || film.letterboxd_uri };
       if (inDb.enriched) {
         enrichedFilms.push(merged);
       } else {
         unenrichedFilms.push(merged);
       }
-    } else if (!lastWatched || !f.watched_date || f.watched_date > lastWatched) {
-      newFilms.push(f);
+    } else if (!lastWatched || !film.last_watched || film.last_watched > lastWatched) {
+      newFilms.push(film);
+      if (diaryEntry) newDiaryEntries.push(diaryEntry);
     }
   }
 
@@ -177,6 +181,7 @@ export async function syncRSS(username, apiKey) {
   }
 
   await upsertFilms([...enriched, ...enrichedFilms]);
+  if (newDiaryEntries.length) await upsertDiaryEntries(newDiaryEntries);
   await chrome.storage.local.set({ last_rss_sync: new Date().toISOString() });
 
   return { added: newFilms.length };
