@@ -228,12 +228,11 @@ Image base: `https://image.tmdb.org/t/p/`
 
 ### Rate limiting
 
-TMDB free tier: ~40 requests per 10 seconds.
-Implement a simple queue:
-- Process films in batches of 20
-- Each film = 2 requests (search + details)
-- Wait 600ms between batches
-- On 429 response: wait 10s, retry
+TMDB is generous — ~40 requests per second.
+Batch size: 40 films at a time (2 requests each = 80 req/batch).
+Wait 1100ms between batches to stay comfortably under the limit.
+On 429: wait 5s, retry once. If it fails again, skip and mark enriched: false.
+No need for aggressive throttling — keep it simple.
 
 ### Export
 

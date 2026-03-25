@@ -1,27 +1,22 @@
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w185';
-const BATCH_SIZE = 20;
-const BATCH_DELAY_MS = 600;
-const RATE_LIMIT_DELAY_MS = 10000;
+const BATCH_SIZE = 40;
+const BATCH_DELAY_MS = 1100;
+const RATE_LIMIT_DELAY_MS = 5000;
 
 async function tmdbFetch(url, apiKey) {
   const separator = url.includes('?') ? '&' : '?';
   const fullUrl = `${url}${separator}api_key=${apiKey}`;
 
-  let attempts = 0;
-  while (attempts < 3) {
-    const response = await fetch(fullUrl);
-    if (response.status === 429) {
-      await delay(RATE_LIMIT_DELAY_MS);
-      attempts++;
-      continue;
-    }
-    if (!response.ok) {
-      return null;
-    }
-    return response.json();
+  const response = await fetch(fullUrl);
+  if (response.status === 429) {
+    await delay(RATE_LIMIT_DELAY_MS);
+    const retry = await fetch(fullUrl);
+    if (!retry.ok) return null;
+    return retry.json();
   }
-  return null;
+  if (!response.ok) return null;
+  return response.json();
 }
 
 function delay(ms) {

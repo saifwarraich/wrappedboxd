@@ -862,6 +862,7 @@ const PANEL_STYLES = `
   }
 
   .lbs-settings-drop-zone {
+    position: relative;
     border: 2px dashed #2a3440;
     border-radius: var(--lbs-radius);
     padding: 14px;
@@ -1191,7 +1192,7 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
           <h4>Update Diary CSV</h4>
           <div class="lbs-settings-drop-zone" id="lbs-settings-drop-zone">
             Drop diary.csv here or click to browse
-            <input type="file" accept=".csv" id="lbs-settings-csv-input" style="display:none">
+            <input type="file" accept=".csv" id="lbs-settings-csv-input" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%">
           </div>
           <div class="lbs-settings-status" id="lbs-settings-csv-status"></div>
           <div id="lbs-settings-enrich-row" style="display:none">
@@ -1447,7 +1448,6 @@ export function renderFullPanel(panel, allFilms, isOwnProfile, username, setting
       }
 
       if (settingsDropZone) {
-        settingsDropZone.addEventListener('click', () => settingsCsvInput.click());
         settingsDropZone.addEventListener('dragover', e => { e.preventDefault(); settingsDropZone.classList.add('drag-over'); });
         settingsDropZone.addEventListener('dragleave', () => settingsDropZone.classList.remove('drag-over'));
         settingsDropZone.addEventListener('drop', e => {
