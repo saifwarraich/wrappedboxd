@@ -124,7 +124,7 @@ export async function fetchRSS(username) {
   return films;
 }
 
-export async function syncRSS(username, apiKey) {
+export async function syncRSS(username) {
   let rssItems;
   try {
     const url = `${RSS_BASE}/${username}/rss/`;
@@ -184,9 +184,9 @@ export async function syncRSS(username, apiKey) {
 
   const toEnrich = [...brandNewFilms, ...unenrichedFilms];
   let enriched = toEnrich;
-  if (toEnrich.length && apiKey) {
+  if (toEnrich.length) {
     try {
-      enriched = await enrichFilms(toEnrich, apiKey, null);
+      enriched = await enrichFilms(toEnrich, null);
     } catch (err) {
       console.warn('[LBS] enrichment failed during sync', err);
     }

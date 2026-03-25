@@ -1,17 +1,17 @@
-const TMDB_BASE = 'https://api.themoviedb.org/3';
+const PROXY_BASE = 'https://unboxd-proxy.vercel.app/api/tmdb';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w185';
 const BATCH_SIZE = 40;
 const BATCH_DELAY_MS = 1100;
 const RATE_LIMIT_DELAY_MS = 5000;
 
-async function tmdbFetch(url, apiKey) {
-  const separator = url.includes('?') ? '&' : '?';
-  const fullUrl = `${url}${separator}api_key=${apiKey}`;
+async function tmdbFetch(endpoint, params = {}) {
+  const qs = new URLSearchParams({ endpoint, ...params }).toString();
+  const url = `${PROXY_BASE}?${qs}`;
 
-  const response = await fetch(fullUrl);
+  const response = await fetch(url);
   if (response.status === 429) {
     await delay(RATE_LIMIT_DELAY_MS);
-    const retry = await fetch(fullUrl);
+    const retry = await fetch(url);
     if (!retry.ok) return null;
     return retry.json();
   }
@@ -23,17 +23,14 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function searchFilm(name, year, apiKey) {
-  const query = encodeURIComponent(name);
-  const url = `${TMDB_BASE}/search/movie?query=${query}&year=${year}`;
-  const data = await tmdbFetch(url, apiKey);
+async function searchFilm(name, year) {
+  const data = await tmdbFetch('search/movie', { query: name, year });
   if (!data || !data.results || data.results.length === 0) return null;
   return data.results[0].id;
 }
 
-async function getFilmDetails(tmdbId, apiKey) {
-  const url = `${TMDB_BASE}/movie/${tmdbId}?append_to_response=credits,keywords`;
-  return tmdbFetch(url, apiKey);
+async function getFilmDetails(tmdbId) {
+  return tmdbFetch(`movie/${tmdbId}`, { append_to_response: 'credits,keywords' });
 }
 
 function extractDirector(credits) {
@@ -61,14 +58,14 @@ function extractKeywords(keywordsData) {
   return keywordsData.keywords.map(k => k.name);
 }
 
-export async function enrichFilm(film, apiKey) {
+export async function enrichFilm(film) {
   try {
-    const tmdbId = await searchFilm(film.name, film.year, apiKey);
+    const tmdbId = await searchFilm(film.name, film.year);
     if (!tmdbId) {
       return { ...film, enriched: false };
     }
 
-    const details = await getFilmDetails(tmdbId, apiKey);
+    const details = await getFilmDetails(tmdbId);
     if (!details) {
       return { ...film, enriched: false };
     }
@@ -104,14 +101,14 @@ export async function enrichFilm(film, apiKey) {
   }
 }
 
-export async function enrichFilms(films, apiKey, onProgress) {
+export async function enrichFilms(films, onProgress) {
   const results = [];
   let done = 0;
   const total = films.length;
 
   for (let i = 0; i < films.length; i += BATCH_SIZE) {
     const batch = films.slice(i, i + BATCH_SIZE);
-    const enriched = await Promise.all(batch.map(f => enrichFilm(f, apiKey)));
+    const enriched = await Promise.all(batch.map(f => enrichFilm(f)));
     results.push(...enriched);
     done += batch.length;
     if (typeof onProgress === 'function') {

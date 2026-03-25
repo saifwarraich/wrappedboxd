@@ -41,7 +41,6 @@ async function main() {
   try {
     settings = await chrome.storage.local.get([
       'own_username',
-      'tmdb_api_key',
       'last_rss_sync',
       'last_full_sync',
       'onboarded',
@@ -96,7 +95,6 @@ async function handleOwnProfile(panel, shadow, username, settings) {
   // Onboarding: not yet set up
   if (!settings.onboarded || filmCount === 0) {
     renderOnboarding(panel, {
-      onSaveKey: (key) => { settings.tmdb_api_key = key; },
       onEnrich: async (enrichedFilms) => {
         settings.onboarded = true;
         await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
@@ -134,7 +132,6 @@ async function loadAndShowStats(panel, shadow, username, settings, initialFilms)
     },
     onUploadCSV: () => {
       renderOnboarding(panel, {
-        onSaveKey: (key) => { settings.tmdb_api_key = key; },
         onEnrich: async (enrichedFilms) => {
           settings.onboarded = true;
           await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
@@ -145,8 +142,7 @@ async function loadAndShowStats(panel, shadow, username, settings, initialFilms)
 
   // Background RSS sync
   try {
-    const { tmdb_api_key } = await chrome.storage.local.get(['tmdb_api_key']);
-    const result = await syncRSS(username, tmdb_api_key);
+    const result = await syncRSS(username);
     if (result.added > 0) {
       const refreshedFilms = await getAllFilms();
       renderFullPanel(panel, refreshedFilms, true, username, settings, {
