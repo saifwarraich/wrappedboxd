@@ -1,5 +1,6 @@
 import { Chart, BarElement, BarController, CategoryScale, LinearScale, Tooltip } from 'chart.js';
 import { computeDecades } from '../../lib/stats.js';
+import { openFilmModal } from '../modal.js';
 
 Chart.register(BarElement, BarController, CategoryScale, LinearScale, Tooltip);
 
@@ -63,6 +64,15 @@ export function renderDecades(films, container) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (event, elements) => {
+        if (!elements.length) return;
+        const decade = entries[elements[0].index].decade;
+        const decadeFilms = films.filter(f => f.decade === decade || (f.year && Math.floor(f.year / 10) * 10 === decade));
+        openFilmModal(container.getRootNode(), `${decade}s`, decadeFilms);
+      },
+      onHover: (event, elements) => {
+        event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       scales: {
         x: {
           ticks: { color: '#9ab' },

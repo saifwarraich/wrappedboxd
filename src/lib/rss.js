@@ -1,4 +1,4 @@
-import { getLastWatchedDate, upsertFilms } from './db.js';
+import { getLastWatchedDate, upsertFilms, getFilm } from './db.js';
 import { enrichFilms } from './tmdb.js';
 
 const RSS_BASE = 'https://letterboxd.com';
@@ -89,6 +89,7 @@ function parseRSSItem(item) {
     rating: (!isNaN(rating) && rating !== null) ? rating : null,
     rewatch: rewatch && rewatch.toLowerCase() === 'yes',
     review: '',
+    letterboxd_uri: link || null,
     tmdb_id: null,
     genres: [],
     director: null,
@@ -146,30 +147,37 @@ export async function syncRSS(username, apiKey) {
 
   const lastWatched = await getLastWatchedDate();
 
-  let newFilms = rssFilms;
-  if (lastWatched) {
-    newFilms = rssFilms.filter(f => {
-      if (!f.watched_date) return true;
-      return f.watched_date > lastWatched;
-    });
+  // Split into new, existing-unenriched, and existing-enriched films
+  const newFilms = [];
+  const unenrichedFilms = [];
+  const enrichedFilms = [];
+
+  for (const f of rssFilms) {
+    const inDb = await getFilm(f.letterboxd_id);
+    if (inDb) {
+      const merged = { ...f, ...inDb, letterboxd_uri: inDb.letterboxd_uri || f.letterboxd_uri };
+      if (inDb.enriched) {
+        enrichedFilms.push(merged);
+      } else {
+        unenrichedFilms.push(merged);
+      }
+    } else if (!lastWatched || !f.watched_date || f.watched_date > lastWatched) {
+      newFilms.push(f);
+    }
   }
 
-  if (!newFilms.length) {
-    await chrome.storage.local.set({ last_rss_sync: new Date().toISOString() });
-    return { added: 0 };
-  }
-
-  let enriched = newFilms;
-  if (apiKey) {
+  const toEnrich = [...newFilms, ...unenrichedFilms];
+  let enriched = toEnrich;
+  if (toEnrich.length && apiKey) {
     try {
-      enriched = await enrichFilms(newFilms, apiKey, null);
+      enriched = await enrichFilms(toEnrich, apiKey, null);
     } catch (err) {
       console.warn('[LBS] enrichment failed during sync', err);
     }
   }
 
-  await upsertFilms(enriched);
+  await upsertFilms([...enriched, ...enrichedFilms]);
   await chrome.storage.local.set({ last_rss_sync: new Date().toISOString() });
 
-  return { added: enriched.length };
+  return { added: newFilms.length };
 }

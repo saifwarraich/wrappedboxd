@@ -630,7 +630,7 @@ const PANEL_STYLES = `
   }
 
   .lbs-theme-tag {
-    background: var(--lbs-text-bright);
+    background: transparent;
     border: none;
     cursor: pointer;
     padding: 2px 8px;

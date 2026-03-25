@@ -1,5 +1,6 @@
 import { Chart, ArcElement, DoughnutController, BarElement, BarController, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { computeGenreBreakdown } from '../../lib/stats.js';
+import { openFilmModal } from '../modal.js';
 
 Chart.register(ArcElement, DoughnutController, BarElement, BarController, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -12,6 +13,10 @@ const GENRE_COLORS = [
 
 let doughnutChartInstance = null;
 let barChartInstance = null;
+
+function getShadowRoot(container) {
+  return container.getRootNode();
+}
 
 export function renderGenres(films, container) {
   const breakdown = computeGenreBreakdown(films);
@@ -53,7 +58,7 @@ export function renderGenres(films, container) {
       </div>
       <div class="lbs-genre-pills">
         ${sortedGenres.slice(0, 20).map(([genre, count], i) => `
-          <div class="lbs-genre-pill">
+          <div class="lbs-genre-pill" data-genre="${genre}" style="cursor:pointer">
             <span class="lbs-genre-dot" style="background:${GENRE_COLORS[i % GENRE_COLORS.length]}"></span>
             <span class="lbs-genre-name">${genre}</span>
             <span class="lbs-genre-count">${count}</span>
@@ -83,6 +88,15 @@ export function renderGenres(films, container) {
       options: {
         responsive: true,
         maintainAspectRatio: true,
+        onClick: (event, elements) => {
+          if (!elements.length) return;
+          const genre = top10[elements[0].index][0];
+          const genreFilms = films.filter(f => f.genres && f.genres.includes(genre));
+          openFilmModal(getShadowRoot(container), genre, genreFilms);
+        },
+        onHover: (event, elements) => {
+          event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+        },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -94,6 +108,15 @@ export function renderGenres(films, container) {
       },
     });
   }
+
+  // Genre pill clicks
+  container.querySelectorAll('.lbs-genre-pill[data-genre]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const genre = pill.dataset.genre;
+      const genreFilms = films.filter(f => f.genres && f.genres.includes(genre));
+      openFilmModal(getShadowRoot(container), genre, genreFilms);
+    });
+  });
 
   // Stacked bar chart
   const barCtx = container.querySelector('#lbs-genre-bar');
@@ -117,6 +140,21 @@ export function renderGenres(films, container) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (event, elements) => {
+          if (!elements.length) return;
+          const el = elements[0];
+          const year = parseInt(validYears[el.index], 10);
+          const genre = topGenres[el.datasetIndex];
+          const title = `${genre} — ${year}`;
+          const genreYearFilms = films.filter(f =>
+            f.genres && f.genres.includes(genre) &&
+            f.watched_date && f.watched_date.startsWith(String(year))
+          );
+          openFilmModal(getShadowRoot(container), title, genreYearFilms);
+        },
+        onHover: (event, elements) => {
+          event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+        },
         scales: {
           x: {
             stacked: true,
