@@ -20,7 +20,7 @@ Behaviour differs based on whether you're viewing **your own profile** or **some
 - **Vanilla JS** (ES modules) — no React, no Vue
 - **Chart.js 4** — all charts, loaded as an npm dependency
 - **IndexedDB** — local film cache (via a thin wrapper, no external lib)
-- **chrome.storage.local** — user settings (TMDB key, own username, last sync time)
+- **chrome.storage.local** — user settings (own username, last sync time)
 - **Manifest V3** — modern Chrome extension format
 
 ---
@@ -125,7 +125,6 @@ Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (
 
 ```js
 {
-  tmdb_api_key: "abc123",
   own_username: "yourname",           // set on first visit, from page DOM
   last_rss_sync: "2024-03-01T12:00:00Z",
   last_full_sync: "2024-03-01T12:00:00Z",
@@ -146,7 +145,7 @@ Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://letterboxd.com/*",
-    "https://api.themoviedb.org/*",
+    "https://unboxd-proxy.vercel.app/*",
     "https://image.tmdb.org/*"
   ],
   "content_scripts": [
@@ -250,15 +249,18 @@ Detection logic: if headers contain `Rewatch` → diary; if headers contain `Rat
 
 ## src/lib/tmdb.js
 
-TMDB API base: `https://api.themoviedb.org/3`
-Image base: `https://image.tmdb.org/t/p/`
+Proxy base: `https://unboxd-proxy.vercel.app/api/tmdb`
+Image base: `https://image.tmdb.org/t/p/` (images are public — no proxy needed)
 
-### Endpoints used
+All requests go through the proxy using `?endpoint=<tmdb_path>` plus other params.
+No `api_key` parameter is ever sent from the client — the proxy handles auth.
 
-1. **Search film** — `GET /search/movie?query={name}&year={year}&api_key={key}`
+### Endpoint format
+
+1. **Search film** — `GET /api/tmdb?endpoint=search/movie&query={name}&year={year}`
    → take first result's `id`
 
-2. **Film details** — `GET /movie/{id}?api_key={key}&append_to_response=credits,keywords`
+2. **Film details** — `GET /api/tmdb?endpoint=movie/{id}&append_to_response=credits,keywords`
    → extract genres (all, as array), runtime, origin_country (array of full names from `production_countries`), vote_average, credits (cast top 5 + director), keywords
 
 3. **Person image** — from credits response, `profile_path` field
@@ -269,17 +271,15 @@ Image base: `https://image.tmdb.org/t/p/`
 
 ### Rate limiting
 
-TMDB is generous — ~40 requests per second.
 Batch size: 40 films at a time (2 requests each = 80 req/batch).
-Wait 1100ms between batches to stay comfortably under the limit.
+Wait 1100ms between batches.
 On 429: wait 5s, retry once. If it fails again, skip and mark enriched: false.
-No need for aggressive throttling — keep it simple.
 
 ### Export
 
 ```js
-enrichFilm(film, apiKey)           // enriches one film, returns updated Film
-enrichFilms(films[], apiKey, onProgress)  // bulk, calls onProgress(done, total) each batch
+enrichFilm(film)           // enriches one film, returns updated Film
+enrichFilms(films[], onProgress)  // bulk, calls onProgress(done, total) each batch
 ```
 
 `onProgress(done, total)` is called after each batch — used to update the progress bar.
@@ -292,7 +292,7 @@ enrichFilms(films[], apiKey, onProgress)  // bulk, calls onProgress(done, total)
 fetchRSS(username)         // fetches https://letterboxd.com/{username}/rss/
                            // returns Film[] parsed from RSS items (CSV fields only, enriched: false)
 
-syncRSS(username, apiKey)  // 1. fetch + parse RSS
+syncRSS(username)          // 1. fetch + parse RSS
                            // 2. get lastWatchedDate from IndexedDB (most recent diary watched_date)
                            // 3. for each RSS item:
                            //    - skip non-film items (no filmTitle AND no watchedDate)
@@ -425,13 +425,11 @@ Same layout but:
 
 ### Onboarding state (own profile, first visit)
 
-Render inside the panel:
-1. Welcome message
-2. TMDB API key input field + save button
-3. CSV file drop zone (or click to upload)
-4. On CSV drop: parse → show film count → show "Enrich with TMDB" button
-5. On enrich: show progress bar (updating via onProgress callback)
-6. On complete: re-render panel with full stats
+Render inside the panel (4 steps — no API key needed):
+1. Welcome message + Upload watched.csv (required)
+2. Upload ratings.csv (optional, skippable)
+3. Upload diary.csv (optional, skippable)
+4. Enrich with TMDB button → progress bar (updating via onProgress callback) → re-render with full stats
 
 ---
 

@@ -6,7 +6,7 @@
   "permissions": ["storage", "alarms"],
   "host_permissions": [
     "https://letterboxd.com/*",
-    "https://api.themoviedb.org/*",
+    "https://unboxd-proxy.vercel.app/*",
     "https://image.tmdb.org/*"
   ],
   "content_scripts": [
