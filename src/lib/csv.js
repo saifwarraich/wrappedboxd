@@ -18,7 +18,7 @@
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function slugify(name, year) {
+export function slugify(name, year) {
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -155,7 +155,6 @@ function parseDiary(lines) {
 
     if (!watched_date) continue;
 
-    // Diary entry
     diaryEntries.push(makeDiaryEntry(letterboxd_id, watched_date, rating, rewatch, tags));
 
     // Film record — merge if already seen (multiple rewatches)
@@ -167,19 +166,15 @@ function parseDiary(lines) {
 
     const film = filmsMap.get(letterboxd_id);
 
-    // first/last watched
     if (!film.first_watched || watched_date < film.first_watched) film.first_watched = watched_date;
     if (!film.last_watched || watched_date > film.last_watched) film.last_watched = watched_date;
 
-    // latest rating wins
     if (rating !== null && watched_date >= (film.last_watched || '')) {
       film.rating = rating;
     }
 
-    // rewatch count
     if (rewatch) film.rewatch_count = (film.rewatch_count || 0) + 1;
 
-    // tags: union
     const tagSet = new Set([...film.tags, ...tags]);
     film.tags = [...tagSet];
   }

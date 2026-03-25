@@ -1,5 +1,6 @@
-import { getLastWatchedDate, upsertFilms, upsertDiaryEntries, getFilm } from './db.js';
+import { getLastWatchedDate, upsertFilms, upsertDiaryEntries, getAllFilms } from './db.js';
 import { enrichFilms } from './tmdb.js';
+import { slugify } from './csv.js';
 
 const RSS_BASE = 'https://letterboxd.com';
 
@@ -17,14 +18,6 @@ function parseRSSTitle(title) {
   return { name: namePart.trim(), year: null };
 }
 
-function slugify(name, year) {
-  const slug = (name || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-  return `${slug}-${year}`;
-}
 
 function getTagText(item, tagName) {
   const els = item.getElementsByTagNameNS('https://letterboxd.com', tagName);
@@ -152,17 +145,18 @@ export async function syncRSS(username, apiKey) {
   if (!rssItems.length) return { added: 0 };
 
   const lastWatched = await getLastWatchedDate();
+  const existingFilms = await getAllFilms();
+  const dbMap = new Map(existingFilms.map(f => [f.letterboxd_id, f]));
 
-  const brandNewFilms = [];    // films not in DB at all
+  const brandNewFilms = [];
   const newDiaryEntries = [];
-  const unenrichedFilms = [];  // in DB but not enriched
-  const enrichedFilms = [];    // in DB and enriched (may need last_watched update)
+  const unenrichedFilms = [];
+  const enrichedFilms = [];
   let newWatchCount = 0;
 
   for (const { film, diaryEntry } of rssItems) {
-    const inDb = await getFilm(film.letterboxd_id);
+    const inDb = dbMap.get(film.letterboxd_id);
     if (inDb) {
-      // Check if this RSS item is a new watch event not yet recorded
       const isNewWatch = diaryEntry && (!inDb.last_watched || diaryEntry.watched_date > inDb.last_watched);
       const merged = {
         ...film,

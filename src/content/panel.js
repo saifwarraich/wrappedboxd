@@ -1038,6 +1038,53 @@ export function renderErrorState(panel, message) {
   `;
 }
 
+function readCSV(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+}
+
+function bindDropZone(panel, dropId, inputId, onFile) {
+  const drop = panel.querySelector(`#${dropId}`);
+  const input = panel.querySelector(`#${inputId}`);
+  if (!drop || !input) return;
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+}
+
+function mergeFilmsIntoMap(films, map) {
+  for (const film of films) {
+    if (!map.has(film.letterboxd_id)) {
+      map.set(film.letterboxd_id, { ...film });
+      continue;
+    }
+    const existing = map.get(film.letterboxd_id);
+    if (film.first_watched && (!existing.first_watched || film.first_watched < existing.first_watched))
+      existing.first_watched = film.first_watched;
+    if (film.last_watched && (!existing.last_watched || film.last_watched > existing.last_watched))
+      existing.last_watched = film.last_watched;
+    if (film.rating != null) {
+      const inDate = film.last_watched || '';
+      const exDate = existing.last_watched || '';
+      if (!existing.rating || inDate >= exDate) existing.rating = film.rating;
+    }
+    if ((film.rewatch_count || 0) > (existing.rewatch_count || 0))
+      existing.rewatch_count = film.rewatch_count;
+    existing.tags = [...new Set([...existing.tags, ...film.tags])];
+    existing.sources = [...new Set([...existing.sources, ...film.sources])];
+  }
+}
+
 export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   panel.innerHTML = `
     <div class="lbs-header">
@@ -1129,60 +1176,10 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   const filmsMap = new Map();
   let allDiaryEntries = [];
 
-  function mergeIntoMap(films) {
-    for (const film of films) {
-      if (!filmsMap.has(film.letterboxd_id)) {
-        filmsMap.set(film.letterboxd_id, { ...film });
-        continue;
-      }
-      const existing = filmsMap.get(film.letterboxd_id);
-      // first/last watched
-      if (film.first_watched && (!existing.first_watched || film.first_watched < existing.first_watched))
-        existing.first_watched = film.first_watched;
-      if (film.last_watched && (!existing.last_watched || film.last_watched > existing.last_watched))
-        existing.last_watched = film.last_watched;
-      // latest rating wins
-      if (film.rating !== null && film.rating !== undefined) {
-        const inDate = film.last_watched || '';
-        const exDate = existing.last_watched || '';
-        if (!existing.rating || inDate >= exDate) existing.rating = film.rating;
-      }
-      // rewatch count: max
-      if ((film.rewatch_count || 0) > (existing.rewatch_count || 0))
-        existing.rewatch_count = film.rewatch_count;
-      // tags + sources: union
-      existing.tags = [...new Set([...existing.tags, ...film.tags])];
-      existing.sources = [...new Set([...existing.sources, ...film.sources])];
-    }
-  }
-
   function showStep(n) {
     [1, 2, 3, 4, 5].forEach(i => {
       panel.querySelector(`#lbs-step-${i}`).classList.toggle('hidden', i !== n);
     });
-  }
-
-  function readCSV(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsText(file);
-    });
-  }
-
-  function bindDropZone(dropId, inputId, onFile) {
-    const drop = panel.querySelector(`#${dropId}`);
-    const input = panel.querySelector(`#${inputId}`);
-    drop.addEventListener('click', () => input.click());
-    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-    drop.addEventListener('drop', e => {
-      e.preventDefault();
-      drop.classList.remove('drag-over');
-      if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
-    });
-    input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
   }
 
   // ── Step 1: TMDB key ───────────────────────────────────────────────────────
@@ -1207,12 +1204,12 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   });
 
   // ── Step 2: watched.csv (required) ────────────────────────────────────────
-  bindDropZone('lbs-drop-2', 'lbs-input-2', async file => {
+  bindDropZone(panel, 'lbs-drop-2', 'lbs-input-2', async file => {
     const status = panel.querySelector('#lbs-status-2');
     try {
       const text = await readCSV(file);
       const { films } = parseLetterboxdCSV(text);
-      mergeIntoMap(films);
+      mergeFilmsIntoMap(films, filmsMap);
       status.innerHTML = `<div class="lbs-step-ok">✓ ${films.length} films loaded</div>`;
       setTimeout(() => showStep(3), 800);
     } catch (err) {
@@ -1221,13 +1218,13 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   });
 
   // ── Step 3: ratings.csv (optional) ────────────────────────────────────────
-  bindDropZone('lbs-drop-3', 'lbs-input-3', async file => {
+  bindDropZone(panel, 'lbs-drop-3', 'lbs-input-3', async file => {
     const status = panel.querySelector('#lbs-status-3');
     try {
       const text = await readCSV(file);
       const { films } = parseLetterboxdCSV(text);
       const before = filmsMap.size;
-      mergeIntoMap(films);
+      mergeFilmsIntoMap(films, filmsMap);
       const added = filmsMap.size - before;
       const rated = films.filter(f => f.rating !== null).length;
       status.innerHTML = `<div class="lbs-step-ok">✓ Ratings added for ${rated} films${added ? `, ${added} new films discovered` : ''}</div>`;
@@ -1240,12 +1237,12 @@ export function renderOnboarding(panel, { onSaveKey, onEnrich }) {
   panel.querySelector('#lbs-skip-3').addEventListener('click', () => showStep(4));
 
   // ── Step 4: diary.csv (optional) ──────────────────────────────────────────
-  bindDropZone('lbs-drop-4', 'lbs-input-4', async file => {
+  bindDropZone(panel, 'lbs-drop-4', 'lbs-input-4', async file => {
     const status = panel.querySelector('#lbs-status-4');
     try {
       const text = await readCSV(file);
       const { films, diaryEntries } = parseLetterboxdCSV(text);
-      mergeIntoMap(films);
+      mergeFilmsIntoMap(films, filmsMap);
       allDiaryEntries = allDiaryEntries.concat(diaryEntries);
       status.innerHTML = `<div class="lbs-step-ok">✓ Watch history for ${films.length} films, ${diaryEntries.length} diary entries</div>`;
       setTimeout(() => showStep(5), 800);
@@ -1508,7 +1505,6 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       renderActiveSection(sectionContent);
     }
 
-    // Tab click handlers
     panel.querySelectorAll('.lbs-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.tab;
@@ -1553,7 +1549,6 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
         });
       }
 
-      // Remove filter pills
       panel.querySelectorAll('.lbs-filter-pill-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           const key = btn.dataset.filter;
@@ -1603,36 +1598,9 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
         });
       }
 
-      // Settings: multi-step CSV upload
+
       const suFilmsMap = new Map();
       let suDiaryEntries = [];
-
-      function suReadCSV(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result);
-          reader.onerror = () => reject(new Error('Failed to read file'));
-          reader.readAsText(file);
-        });
-      }
-
-      function suMerge(films) {
-        for (const film of films) {
-          if (!suFilmsMap.has(film.letterboxd_id)) {
-            suFilmsMap.set(film.letterboxd_id, { ...film });
-            continue;
-          }
-          const ex = suFilmsMap.get(film.letterboxd_id);
-          if (film.first_watched && (!ex.first_watched || film.first_watched < ex.first_watched)) ex.first_watched = film.first_watched;
-          if (film.last_watched && (!ex.last_watched || film.last_watched > ex.last_watched)) ex.last_watched = film.last_watched;
-          if (film.rating !== null && film.rating !== undefined) {
-            if (!ex.rating || (film.last_watched || '') >= (ex.last_watched || '')) ex.rating = film.rating;
-          }
-          if ((film.rewatch_count || 0) > (ex.rewatch_count || 0)) ex.rewatch_count = film.rewatch_count;
-          ex.tags = [...new Set([...ex.tags, ...film.tags])];
-          ex.sources = [...new Set([...ex.sources, ...film.sources])];
-        }
-      }
 
       function suShowStep(n) {
         [1, 2, 3, 4].forEach(i => {
@@ -1640,22 +1608,12 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
         });
       }
 
-      function suBindDrop(dropId, inputId, onFile) {
-        const drop = panel.querySelector(`#${dropId}`);
-        const input = panel.querySelector(`#${inputId}`);
-        if (!drop) return;
-        drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-        drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
-        drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-over'); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
-        input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
-      }
-
       // Step 1: watched.csv
-      suBindDrop('lbs-su-drop-1', 'lbs-su-input-1', async file => {
+      bindDropZone(panel, 'lbs-su-drop-1', 'lbs-su-input-1', async file => {
         const status = panel.querySelector('#lbs-su-status-1');
         try {
-          const { films } = parseLetterboxdCSV(await suReadCSV(file));
-          suMerge(films);
+          const { films } = parseLetterboxdCSV(await readCSV(file));
+          mergeFilmsIntoMap(films, suFilmsMap);
           status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films loaded</span>`;
           setTimeout(() => suShowStep(2), 800);
         } catch (err) {
@@ -1664,12 +1622,12 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       });
 
       // Step 2: ratings.csv
-      suBindDrop('lbs-su-drop-2', 'lbs-su-input-2', async file => {
+      bindDropZone(panel, 'lbs-su-drop-2', 'lbs-su-input-2', async file => {
         const status = panel.querySelector('#lbs-su-status-2');
         try {
-          const { films } = parseLetterboxdCSV(await suReadCSV(file));
+          const { films } = parseLetterboxdCSV(await readCSV(file));
           const before = suFilmsMap.size;
-          suMerge(films);
+          mergeFilmsIntoMap(films, suFilmsMap);
           const rated = films.filter(f => f.rating !== null).length;
           const added = suFilmsMap.size - before;
           status.innerHTML = `<span class="lbs-step-ok">✓ Ratings for ${rated} films${added ? `, ${added} new` : ''}</span>`;
@@ -1681,11 +1639,11 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       panel.querySelector('#lbs-su-skip-2').addEventListener('click', () => suShowStep(3));
 
       // Step 3: diary.csv
-      suBindDrop('lbs-su-drop-3', 'lbs-su-input-3', async file => {
+      bindDropZone(panel, 'lbs-su-drop-3', 'lbs-su-input-3', async file => {
         const status = panel.querySelector('#lbs-su-status-3');
         try {
-          const { films, diaryEntries } = parseLetterboxdCSV(await suReadCSV(file));
-          suMerge(films);
+          const { films, diaryEntries } = parseLetterboxdCSV(await readCSV(file));
+          mergeFilmsIntoMap(films, suFilmsMap);
           suDiaryEntries = suDiaryEntries.concat(diaryEntries);
           status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films, ${diaryEntries.length} diary entries</span>`;
           setTimeout(() => suShowStep(4), 800);

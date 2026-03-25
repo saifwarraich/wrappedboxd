@@ -95,7 +95,7 @@ Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (
   poster: "https://image.tmdb.org/t/p/w185/...",
   tmdb_rating: 8.4,
   runtime: 139,
-  origin_country: "US",
+  origin_country: ["United States of America", "United Kingdom"],  // array of full country names from TMDB production_countries
   enriched: true,                      // false if TMDB fetch failed/pending
   enriched_at: "2024-03-01T12:00:00Z"
 }
@@ -242,7 +242,7 @@ parseLetterboxdCSV(csvText)
 
 Detection logic: if headers contain `Rewatch` → diary; if headers contain `Rating` but not `Rewatch` → ratings; otherwise → watched.
 
-- `letterboxd_id` = slug from URI path (`https://boxd.it/xxxx`), fallback to `"fight-club-1999"` slugify
+- `letterboxd_id` = **always** `slugify(name, year)` — never derived from the URI. URI formats differ between export files (boxd.it short URLs vs letterboxd.com/film/slug) which causes duplicates if used as ID.
 - `rating` = decimal `"4.5"` or star `"★★★½"` format, null if missing
 - User may upload any subset of the three files; all are optional
 
@@ -259,7 +259,7 @@ Image base: `https://image.tmdb.org/t/p/`
    → take first result's `id`
 
 2. **Film details** — `GET /movie/{id}?api_key={key}&append_to_response=credits,keywords`
-   → extract genres, runtime, origin_country, vote_average, credits (cast top 5 + director), keywords
+   → extract genres (all, as array), runtime, origin_country (array of full names from `production_countries`), vote_average, credits (cast top 5 + director), keywords
 
 3. **Person image** — from credits response, `profile_path` field
    → full URL: `https://image.tmdb.org/t/p/w185{profile_path}`
@@ -292,23 +292,29 @@ enrichFilms(films[], apiKey, onProgress)  // bulk, calls onProgress(done, total)
 fetchRSS(username)         // fetches https://letterboxd.com/{username}/rss/
                            // returns Film[] parsed from RSS items (CSV fields only, enriched: false)
 
-syncRSS(username, apiKey)  // 1. fetchRSS
-                           // 2. get lastWatchedDate from IndexedDB
-                           // 3. filter RSS films newer than lastWatchedDate
-                           // 4. enrichFilms on new ones
-                           // 5. upsertFilms
+syncRSS(username, apiKey)  // 1. fetch + parse RSS
+                           // 2. get lastWatchedDate from IndexedDB (most recent diary watched_date)
+                           // 3. for each RSS item:
+                           //    - skip non-film items (no filmTitle AND no watchedDate)
+                           //    - if film NOT in DB: add if last_watched >= lastWatchedDate
+                           //    - if film IS in DB: check if diary entry is newer than inDb.last_watched;
+                           //      if so, add the diary entry and update last_watched/rating on film
+                           // 4. enrichFilms on brand-new films + unenriched existing films
+                           // 5. upsertFilms + upsertDiaryEntries
                            // 6. update last_rss_sync in chrome.storage.local
-                           // returns { added: N }
+                           // returns { added: N }  (new films + new watch events on existing films)
 ```
 
 RSS item fields to extract:
-- `title` → film name + year (parse: "Fight Club, 1999 - ★★★★")
+- `title` → film name + year (parse: "Fight Club, 1999 - ★★★★") — fallback if no filmTitle tag
 - `letterboxd:watchedDate` → watched_date
 - `letterboxd:memberRating` → rating (already decimal)
 - `letterboxd:rewatch` → rewatch ("Yes"/"No")
-- `letterboxd:filmTitle` → clean name
+- `letterboxd:filmTitle` → clean name (preferred over title parsing)
 - `letterboxd:filmYear` → year
-- `link` → extract slug for letterboxd_id
+- `link` → letterboxd_uri only (NOT used for letterboxd_id — always use slugify)
+
+Non-film items (lists, reviews without a film tag): skip if both `filmTitle` and `watchedDate` are absent.
 
 For **other users' profiles** (not own), call `fetchRSS` only — do not enrich, do not write to IndexedDB. Compute stats on the fly from the raw RSS array.
 
@@ -431,18 +437,30 @@ Render inside the panel:
 
 ## src/content/sections/overview.js
 
-A horizontal strip of 5 stat cards:
+`renderOverview(films, diaryEntries, container)` — takes both films array and diary entries array.
 
-| Stat | Value |
+Two rows of stats:
+
+**Circles row** (large coloured circles):
+| Stat | Color | Clickable |
+|---|---|---|
+| Films Logged | orange | opens diary modal (sorted by date) |
+| Hours Watched | green | — |
+| Avg Rating | blue | opens film modal of rated films |
+
+Films Logged = `diaryEntries.length` (actual diary entries, filtered by active filters).
+
+**Extras row** (smaller stat pills):
+| Stat | Clickable |
 |---|---|
-| Films | 847 |
-| Hours | 1,412h |
-| Avg Rating | ★ 3.6 |
-| Countries | 42 |
-| This Year | 134 |
+| Films Watched | opens film modal of all films |
+| Countries | opens countries modal |
+| This Year | opens film modal of films watched this year |
+| Rewatches | opens film modal of rewatched films |
 
-Each card: number in large white text, label below in muted green-grey.
-Style matches Letterboxd's stat counters.
+Below: featured person cards for Most Watched Actor and Most Watched Director (clickable → film modal filtered by that person).
+
+Countries modal: groups films by each country in `origin_country` array (a film appears under every country it belongs to). Rows are expandable. No flag emojis.
 
 ---
 
