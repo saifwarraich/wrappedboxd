@@ -1049,6 +1049,7 @@ function bindDropZone(panel, dropId, inputId, onFile) {
   const input = panel.querySelector(`#${inputId}`);
   if (!drop || !input) return;
   drop.addEventListener('click', () => input.click());
+  input.addEventListener('click', e => e.stopPropagation());
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
   drop.addEventListener('drop', e => {
