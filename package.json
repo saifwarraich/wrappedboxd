@@ -1,5 +1,5 @@
 {
-  "name": "letterboxd-stats",
+  "name": "unboxd",
   "version": "1.0.0",
   "description": "Rich stats panel injected into your Letterboxd profile.",
   "type": "module",

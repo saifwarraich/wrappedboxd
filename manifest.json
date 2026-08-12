@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Letterboxd Stats",
+  "name": "Unboxd",
   "version": "1.0.0",
   "description": "Rich stats panel injected into your Letterboxd profile.",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://letterboxd.com/*",
     "https://unboxd-proxy.vercel.app/*",
