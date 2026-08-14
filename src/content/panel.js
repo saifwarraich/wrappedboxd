@@ -1005,7 +1005,7 @@ export function injectPanel() {
 export function renderLoadingState(panel) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
       <div class="lbs-sync-info">Loading...</div>
     </div>
     <div class="lbs-body">
@@ -1025,7 +1025,7 @@ export function renderLoadingState(panel) {
 export function renderErrorState(panel, message) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
     </div>
     <div class="lbs-body">
       <div class="lbs-section">
@@ -1086,7 +1086,7 @@ function mergeFilmsIntoMap(films, map) {
 export function renderOnboarding(panel, { onEnrich }) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Boxd</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
     </div>
     <div class="lbs-onboarding">
       <h2>Welcome to WrappedBoxd</h2>
@@ -1427,7 +1427,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
 
     panel.innerHTML = `
       <div class="lbs-header">
-        <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
+        <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
         <div class="lbs-sync-info">Last synced ${syncTime}</div>
         <div class="lbs-header-actions">
           ${isOwnProfile ? `
