@@ -2,7 +2,7 @@ Address review feedback on pull request: $ARGUMENTS.
 
 # Address Review
 
-You are working on **Unboxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before doing anything.
+You are working on **WrappedBoxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before doing anything.
 
 ---
 
@@ -64,10 +64,10 @@ For every piece of feedback (even things you're not changing), leave a reply:
 
 ```bash
 # Get comment IDs
-gh api repos/USERNAME/unboxd/pulls/$ARGUMENTS/comments --jq '.[].id'
+gh api repos/USERNAME/wrappedboxd/pulls/$ARGUMENTS/comments --jq '.[].id'
 
 # Reply to each comment
-gh api repos/USERNAME/unboxd/pulls/$ARGUMENTS/comments \
+gh api repos/USERNAME/wrappedboxd/pulls/$ARGUMENTS/comments \
   --method POST \
   --field body="<your reply>" \
   --field in_reply_to=<comment_id>

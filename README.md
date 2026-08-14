@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="src/assets/icon.png" width="80" alt="Unboxd icon" />
+  <img src="src/assets/icon.png" width="80" alt="WrappedBoxd icon" />
 </p>
 
-<h1 align="center">Unboxd</h1>
+<h1 align="center">WrappedBoxd</h1>
 
 <p align="center">A Chrome extension that injects a rich stats panel into your Letterboxd profile page.</p>
 
 <p align="center">
-  <img src="screenshot/overview.png" alt="Unboxd stats panel" />
+  <img src="screenshot/overview.png" alt="WrappedBoxd stats panel" />
 </p>
 
 ---
@@ -40,7 +40,7 @@ Download the latest release from the [Releases page](../../releases), then:
 
 ## Getting your data from Letterboxd
 
-Unboxd works from your Letterboxd export files — there's no official Letterboxd API, so this is the only way to get your full history into the extension.
+WrappedBoxd works from your Letterboxd export files — there's no official Letterboxd API, so this is the only way to get your full history into the extension.
 
 **Step 1 — Go to your Letterboxd settings and click Export Your Data**
 
@@ -50,7 +50,7 @@ Unboxd works from your Letterboxd export files — there's no official Letterbox
 
 <img src="screenshot/get-data-steps/files.png" alt="CSV files inside the Letterboxd export" />
 
-The ones Unboxd uses:
+The ones WrappedBoxd uses:
 - `watched.csv` — every film you've marked as watched (required)
 - `ratings.csv` — your star ratings
 - `diary.csv` — watch dates, rewatches, and tags
@@ -81,8 +81,8 @@ To re-upload: click the **Upload CSV** button in the panel header and import you
 **Requirements:** Node.js 18+, Chrome
 
 ```bash
-git clone https://github.com/USERNAME/unboxd.git
-cd unboxd
+git clone https://github.com/USERNAME/wrappedboxd.git
+cd wrappedboxd
 npm install
 npm run dev    # builds to dist/ on every save
 ```

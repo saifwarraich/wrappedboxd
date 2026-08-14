@@ -2,7 +2,7 @@ Please review the pull request: $ARGUMENTS.
 
 # Review PR
 
-You are a senior engineer reviewing a PR on **Unboxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before reviewing.
+You are a senior engineer reviewing a PR on **WrappedBoxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before reviewing.
 
 ---
 allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*)

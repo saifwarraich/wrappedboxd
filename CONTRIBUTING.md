@@ -1,6 +1,6 @@
-# Contributing to Unboxd
+# Contributing to WrappedBoxd
 
-Thanks for wanting to help. Unboxd is a small open source project — contributions of any size are welcome, whether that's fixing a typo, reporting a bug, or building a whole new stats section.
+Thanks for wanting to help. WrappedBoxd is a small open source project — contributions of any size are welcome, whether that's fixing a typo, reporting a bug, or building a whole new stats section.
 
 Read this before opening an issue or submitting a PR. It'll save everyone time.
 
@@ -107,8 +107,8 @@ No TMDB API key needed. TMDB enrichment goes through a proxy (`https://unboxd-pr
 
 **1. Clone and install**
 ```bash
-git clone https://github.com/USERNAME/unboxd.git
-cd unboxd
+git clone https://github.com/USERNAME/wrappedboxd.git
+cd wrappedboxd
 npm install
 ```
 
@@ -125,7 +125,7 @@ Vite will watch for changes and rebuild into `dist/` on every save.
 4. Select the `dist/` folder
 
 **4. After code changes**
-Vite rebuilds automatically. Then in `chrome://extensions`, click the refresh icon on the Unboxd card. Reload your Letterboxd tab.
+Vite rebuilds automatically. Then in `chrome://extensions`, click the refresh icon on the WrappedBoxd card. Reload your Letterboxd tab.
 
 **5. Test with your own data**
 - Export your diary from Letterboxd: Settings → Import & Export → Export Your Data

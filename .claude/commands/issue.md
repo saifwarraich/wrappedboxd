@@ -2,7 +2,7 @@ Please analyze and fix the GitHub issue: $ARGUMENTS.
 
 # Implement Issue
 
-You are working on **Unboxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before doing anything.
+You are working on **WrappedBoxd** — a Chrome extension that injects a stats panel into Letterboxd profile pages. Read `CLAUDE.md` for full project context before doing anything.
 
 ---
 

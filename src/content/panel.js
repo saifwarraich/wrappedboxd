@@ -1086,10 +1086,10 @@ function mergeFilmsIntoMap(films, map) {
 export function renderOnboarding(panel, { onEnrich }) {
   panel.innerHTML = `
     <div class="lbs-header">
-      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Un</span><span style="color:var(--lbs-green)">box</span><span style="color:#40bcf4">d</span></div>
+      <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Boxd</span></div>
     </div>
     <div class="lbs-onboarding">
-      <h2>Welcome to Unboxd</h2>
+      <h2>Welcome to WrappedBoxd</h2>
       <p>Get rich stats about your films — directors, genres, decades, ratings and more.</p>
 
       <div class="lbs-onboarding-steps">
