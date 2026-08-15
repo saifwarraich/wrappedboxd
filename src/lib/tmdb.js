@@ -2,8 +2,9 @@
 // previously-enriched films in IndexedDB need to be re-fetched from TMDB to
 // pick up the fix or a newly-added field (e.g. cast list was truncated to
 // top 5 before v2; language data was added in v3, but a mergeFilm() bug
-// dropped it on the way into IndexedDB until v4 — see db.js).
-export const ENRICHMENT_DATA_VERSION = 4;
+// dropped it on the way into IndexedDB until v4 — see db.js; original_language
+// (single primary language) was added in v5).
+export const ENRICHMENT_DATA_VERSION = 5;
 
 const PROXY_BASE = 'https://unboxd-proxy.vercel.app/api/tmdb';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w185';
@@ -72,6 +73,15 @@ function extractLanguages(details) {
     .filter(Boolean);
 }
 
+// original_language is an ISO 639-1 code (e.g. "en"); resolve it to a full
+// name via the same film's spoken_languages entries rather than maintaining
+// a separate code→name table.
+function extractOriginalLanguage(details) {
+  if (!details.original_language) return null;
+  const match = (details.spoken_languages || []).find(l => l.iso_639_1 === details.original_language);
+  return match?.english_name || null;
+}
+
 export async function enrichFilm(film) {
   try {
     const tmdbId = await searchFilm(film.name, film.year);
@@ -92,6 +102,7 @@ export async function enrichFilm(film) {
       ? details.production_countries.map(c => c.name).filter(Boolean)
       : [];
     const languages = extractLanguages(details);
+    const originalLanguage = extractOriginalLanguage(details);
 
     return {
       ...film,
@@ -107,6 +118,7 @@ export async function enrichFilm(film) {
       runtime: details.runtime || null,
       origin_country: originCountry,
       languages,
+      original_language: originalLanguage,
       decade: film.year ? Math.floor(film.year / 10) * 10 : film.decade,
       enriched: true,
       enriched_at: new Date().toISOString(),

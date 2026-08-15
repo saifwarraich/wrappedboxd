@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WrappedBoxd",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Rich stats panel injected into your Letterboxd profile.",
   "permissions": ["storage"],
   "host_permissions": [

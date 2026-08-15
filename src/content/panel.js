@@ -8,9 +8,10 @@ import { renderLanguages } from './sections/languages.js';
 import { renderRatings } from './sections/ratings.js';
 import { filterFilms } from '../lib/stats.js';
 import { syncRSS } from '../lib/rss.js';
-import { getAllFilms, upsertFilms, upsertDiaryEntries } from '../lib/db.js';
+import { getAllFilms, upsertFilms, upsertDiaryEntries, correctWatchDates, DATE_DATA_VERSION } from '../lib/db.js';
 import { enrichFilms, ENRICHMENT_DATA_VERSION } from '../lib/tmdb.js';
 import { parseLetterboxdCSV } from '../lib/csv.js';
+import { escapeHtml } from '../lib/escape.js';
 
 const PANEL_STYLES = `
   :host {
@@ -996,7 +997,7 @@ function getFilterOptions(films) {
     if (f.last_watched) years.add(f.last_watched.substring(0, 4));
     if (f.decade !== null && f.decade !== undefined) decades.add(f.decade);
     if (f.genres) f.genres.forEach(g => genres.add(g));
-    if (f.languages) f.languages.forEach(l => languages.add(l));
+    if (f.original_language) languages.add(f.original_language);
   }
 
   return {
@@ -1210,7 +1211,7 @@ export function renderOnboarding(panel, { onEnrich }) {
       status.innerHTML = `<div class="lbs-step-ok">✓ ${films.length} films loaded</div>`;
       setTimeout(() => showStep(2), 800);
     } catch (err) {
-      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${escapeHtml(err.message)}</div>`;
     }
   });
 
@@ -1227,7 +1228,7 @@ export function renderOnboarding(panel, { onEnrich }) {
       status.innerHTML = `<div class="lbs-step-ok">✓ Ratings added for ${rated} films${added ? `, ${added} new films discovered` : ''}</div>`;
       setTimeout(() => showStep(3), 800);
     } catch (err) {
-      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${escapeHtml(err.message)}</div>`;
     }
   });
 
@@ -1244,7 +1245,7 @@ export function renderOnboarding(panel, { onEnrich }) {
       status.innerHTML = `<div class="lbs-step-ok">✓ Watch history for ${films.length} films, ${diaryEntries.length} diary entries</div>`;
       setTimeout(() => showStep(4), 800);
     } catch (err) {
-      status.innerHTML = `<div class="lbs-error">Failed to parse: ${err.message}</div>`;
+      status.innerHTML = `<div class="lbs-error">Failed to parse: ${escapeHtml(err.message)}</div>`;
     }
   });
 
@@ -1285,6 +1286,7 @@ export function renderOnboarding(panel, { onEnrich }) {
         onboarded: true,
         last_full_sync: new Date().toISOString(),
         cast_data_version: ENRICHMENT_DATA_VERSION,
+        date_data_version: DATE_DATA_VERSION,
       });
 
       progressBar.style.width = '100%';
@@ -1292,7 +1294,7 @@ export function renderOnboarding(panel, { onEnrich }) {
 
       if (typeof onEnrich === 'function') onEnrich(enriched);
     } catch (err) {
-      enrichError.innerHTML = `<div class="lbs-error">Enrichment error: ${err.message}</div>`;
+      enrichError.innerHTML = `<div class="lbs-error">Enrichment error: ${escapeHtml(err.message)}</div>`;
       enrichBtn.disabled = false;
       enrichBtn.textContent = 'Retry';
     }
@@ -1466,18 +1468,20 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
   function render() {
     const bannerHTML = !isOwnProfile ? `
       <div class="lbs-banner">
-        These stats are based on the 50 most recent entries from <strong>${username}</strong>'s public activity. Stats may be incomplete.
+        These stats are based on the 50 most recent entries from <strong>${escapeHtml(username)}</strong>'s public activity. Stats may be incomplete.
       </div>
     ` : '';
 
     const needsEnrichmentUpdate = isOwnProfile && settings.cast_data_version !== ENRICHMENT_DATA_VERSION;
+    const needsDateCorrection = isOwnProfile && settings.date_data_version !== DATE_DATA_VERSION;
+    const needsDataUpdate = needsEnrichmentUpdate || needsDateCorrection;
 
     panel.innerHTML = `
       <div class="lbs-header">
         <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
         <div class="lbs-sync-info">
           Last synced ${syncTime}
-          ${needsEnrichmentUpdate ? `<span class="lbs-update-hint" id="lbs-update-hint">New film data available — <span class="lbs-update-hint-link" id="lbs-update-hint-link">update now</span></span>` : ''}
+          ${needsDataUpdate ? `<span class="lbs-update-hint" id="lbs-update-hint">New film data available — <span class="lbs-update-hint-link" id="lbs-update-hint-link">update now</span></span>` : ''}
         </div>
         <div class="lbs-header-actions">
           ${isOwnProfile ? `
@@ -1601,7 +1605,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
           status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films loaded</span>`;
           setTimeout(() => suShowStep(2), 800);
         } catch (err) {
-          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${escapeHtml(err.message)}</span>`;
         }
       });
 
@@ -1617,7 +1621,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
           status.innerHTML = `<span class="lbs-step-ok">✓ Ratings for ${rated} films${added ? `, ${added} new` : ''}</span>`;
           setTimeout(() => suShowStep(3), 800);
         } catch (err) {
-          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${escapeHtml(err.message)}</span>`;
         }
       });
       panel.querySelector('#lbs-su-skip-2').addEventListener('click', () => suShowStep(3));
@@ -1632,7 +1636,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
           status.innerHTML = `<span class="lbs-step-ok">✓ ${films.length} films, ${diaryEntries.length} diary entries</span>`;
           setTimeout(() => suShowStep(4), 800);
         } catch (err) {
-          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${err.message}</span>`;
+          status.innerHTML = `<span style="color:#e74c3c">Parse error: ${escapeHtml(err.message)}</span>`;
         }
       });
       panel.querySelector('#lbs-su-skip-3').addEventListener('click', () => suShowStep(4));
@@ -1656,7 +1660,9 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
             });
             await upsertFilms(enriched);
             await upsertDiaryEntries(suDiaryEntries);
-            await chrome.storage.local.set({ onboarded: true, last_full_sync: new Date().toISOString(), cast_data_version: ENRICHMENT_DATA_VERSION });
+            await chrome.storage.local.set({ onboarded: true, last_full_sync: new Date().toISOString(), cast_data_version: ENRICHMENT_DATA_VERSION, date_data_version: DATE_DATA_VERSION });
+            settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+            settings.date_data_version = DATE_DATA_VERSION;
             settingsEnrichStatus.innerHTML = '<span style="color:var(--lbs-green)">Done! Reloading stats...</span>';
             const refreshed = await getAllFilms();
             allFilms = refreshed;
@@ -1664,7 +1670,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
             settingsVisible = false;
             render();
           } catch (err) {
-            settingsEnrichStatus.innerHTML = `<span style="color:#e74c3c">Error: ${err.message}</span>`;
+            settingsEnrichStatus.innerHTML = `<span style="color:#e74c3c">Error: ${escapeHtml(err.message)}</span>`;
             settingsEnrichBtn.disabled = false;
             settingsEnrichBtn.textContent = 'Retry';
           }
@@ -1700,6 +1706,13 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
                 await upsertFilms(reEnriched);
                 await chrome.storage.local.set({ cast_data_version: ENRICHMENT_DATA_VERSION });
                 settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+
+                // Local-only correction: recompute first_watched/last_watched from
+                // diary entries, clearing out dates that a past bug pulled from
+                // ratings.csv/watched.csv's log date instead of a real watched date.
+                await correctWatchDates(await getAllFilms());
+                await chrome.storage.local.set({ date_data_version: DATE_DATA_VERSION });
+                settings.date_data_version = DATE_DATA_VERSION;
               }
             }
             const result = await syncRSS(username);

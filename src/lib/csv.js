@@ -86,6 +86,7 @@ function blankTmdbFields() {
     runtime: null,
     origin_country: null,
     languages: [],
+    original_language: null,
     enriched: false,
     enriched_at: null,
   };
@@ -194,19 +195,19 @@ function parseRatings(lines) {
     const cols = parseCSVLine(lines[i]);
     if (cols.length < 5) continue;
 
-    const [dateStr, name, yearStr, uri, ratingStr] = cols;
+    const [, name, yearStr, uri, ratingStr] = cols;
     if (!name || !name.trim()) continue;
 
     const year = parseInt(yearStr, 10) || null;
     const uriTrimmed = uri && uri.trim() ? uri.trim() : null;
     const letterboxd_id = slugify(name.trim(), year);
     const rating = parseRating(ratingStr);
-    const date = dateStr && dateStr.trim() ? dateStr.trim() : null;
 
     const film = makeFilm(letterboxd_id, name.trim(), year, uriTrimmed);
     film.rating = rating;
-    film.first_watched = date;
-    film.last_watched = date;
+    // Date here is when the rating was logged, not when the film was
+    // watched — leave first_watched/last_watched null unless diary.csv
+    // supplies a real watched date.
     film.sources = ['ratings'];
 
     films.push(film);
@@ -226,17 +227,17 @@ function parseWatched(lines) {
     const cols = parseCSVLine(lines[i]);
     if (cols.length < 4) continue;
 
-    const [dateStr, name, yearStr, uri] = cols;
+    const [, name, yearStr, uri] = cols;
     if (!name || !name.trim()) continue;
 
     const year = parseInt(yearStr, 10) || null;
     const uriTrimmed = uri && uri.trim() ? uri.trim() : null;
     const letterboxd_id = slugify(name.trim(), year);
-    const date = dateStr && dateStr.trim() ? dateStr.trim() : null;
 
     const film = makeFilm(letterboxd_id, name.trim(), year, uriTrimmed);
-    film.first_watched = date;
-    film.last_watched = date;
+    // Date here is when the film was added to the watched list, not when
+    // it was watched — leave first_watched/last_watched null unless
+    // diary.csv supplies a real watched date.
     film.sources = ['watched'];
 
     films.push(film);

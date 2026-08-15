@@ -190,6 +190,8 @@ const EXTENDED_STYLES = `
   .lbs-country-film-item:hover .lbs-film-title { color: #00e054; }
 `;
 
+import { escapeHtml } from '../lib/escape.js';
+
 let styleInjected = false;
 
 function ensureStyles(shadowRoot) {
@@ -220,21 +222,21 @@ export function openFilmModal(shadowRoot, title, films) {
     <div class="lbs-modal">
       <div class="lbs-modal-header">
         <div class="lbs-modal-title">
-          ${title}
+          ${escapeHtml(title)}
           <span class="lbs-modal-count">${films.length} film${films.length !== 1 ? 's' : ''}</span>
         </div>
         <button class="lbs-modal-close">✕</button>
       </div>
       <div class="lbs-modal-body">
         ${sorted.map(f => `
-          <div class="lbs-film-row ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${f.letterboxd_uri}"` : ''}>
+          <div class="lbs-film-row ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${escapeHtml(f.letterboxd_uri)}"` : ''}>
             ${f.poster
-              ? `<img class="lbs-film-poster" src="${f.poster}" alt="${f.name}" loading="lazy">`
+              ? `<img class="lbs-film-poster" src="${escapeHtml(f.poster)}" alt="${escapeHtml(f.name)}" loading="lazy">`
               : `<div class="lbs-film-poster-placeholder"></div>`
             }
             <div class="lbs-film-info">
-              <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
-              <div class="lbs-film-meta">${f.last_watched || ''}</div>
+              <div class="lbs-film-title">${escapeHtml(f.name)}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
+              <div class="lbs-film-meta">${escapeHtml(f.last_watched || '')}</div>
             </div>
             <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
           </div>
@@ -280,17 +282,17 @@ export function openDiaryModal(shadowRoot, diaryEntries, filmsMap) {
         ${sorted.map(e => {
           const film = filmsMap.get(e.letterboxd_id) || {};
           return `
-            <div class="lbs-film-row ${film.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${film.letterboxd_uri ? `data-uri="${film.letterboxd_uri}"` : ''}>
+            <div class="lbs-film-row ${film.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${film.letterboxd_uri ? `data-uri="${escapeHtml(film.letterboxd_uri)}"` : ''}>
               ${film.poster
-                ? `<img class="lbs-film-poster" src="${film.poster}" alt="${film.name || ''}" loading="lazy">`
+                ? `<img class="lbs-film-poster" src="${escapeHtml(film.poster)}" alt="${escapeHtml(film.name || '')}" loading="lazy">`
                 : `<div class="lbs-film-poster-placeholder"></div>`
               }
               <div class="lbs-film-info">
                 <div class="lbs-film-title">
-                  ${film.name || e.letterboxd_id}${film.year ? ` <span style="color:#678;font-weight:400">${film.year}</span>` : ''}
+                  ${escapeHtml(film.name || e.letterboxd_id)}${film.year ? ` <span style="color:#678;font-weight:400">${film.year}</span>` : ''}
                   ${e.rewatch ? '<span class="lbs-rewatch-badge">↩ rewatch</span>' : ''}
                 </div>
-                <div class="lbs-diary-date">${e.watched_date || ''}</div>
+                <div class="lbs-diary-date">${escapeHtml(e.watched_date || '')}</div>
               </div>
               <div class="lbs-film-rating">${e.rating ? '★ ' + e.rating.toFixed(1) : '—'}</div>
             </div>
@@ -312,13 +314,12 @@ export function openLanguagesModal(shadowRoot, films) {
   ensureStyles(shadowRoot);
   shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();
 
-  // Group by language — a film with multiple spoken languages appears under each
+  // Group by each film's original (primary) language
   const languageMap = new Map();
   for (const film of films) {
-    for (const language of (film.languages || [])) {
-      if (!languageMap.has(language)) languageMap.set(language, []);
-      languageMap.get(language).push(film);
-    }
+    if (!film.original_language) continue;
+    if (!languageMap.has(film.original_language)) languageMap.set(film.original_language, []);
+    languageMap.get(film.original_language).push(film);
   }
   const languages = [...languageMap.entries()]
     .sort((a, b) => b[1].length - a[1].length);
@@ -338,7 +339,7 @@ export function openLanguagesModal(shadowRoot, films) {
         ${languages.map(([language, languageFilms], i) => `
           <div class="lbs-country-row" data-idx="${i}">
             <div class="lbs-country-header">
-              <span class="lbs-country-name">${language}</span>
+              <span class="lbs-country-name">${escapeHtml(language)}</span>
               <span class="lbs-country-right">
                 <span>${languageFilms.length} film${languageFilms.length !== 1 ? 's' : ''}</span>
                 <span class="lbs-country-chevron">▶</span>
@@ -346,13 +347,13 @@ export function openLanguagesModal(shadowRoot, films) {
             </div>
             <div class="lbs-country-films" id="lbs-lf-${i}">
               ${[...languageFilms].sort((a, b) => (b.rating || 0) - (a.rating || 0)).map(f => `
-                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${f.letterboxd_uri}"` : ''}>
+                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${escapeHtml(f.letterboxd_uri)}"` : ''}>
                   ${f.poster
-                    ? `<img class="lbs-film-poster" src="${f.poster}" alt="${f.name}" loading="lazy">`
+                    ? `<img class="lbs-film-poster" src="${escapeHtml(f.poster)}" alt="${escapeHtml(f.name)}" loading="lazy">`
                     : `<div class="lbs-film-poster-placeholder"></div>`
                   }
                   <div class="lbs-film-info">
-                    <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
+                    <div class="lbs-film-title">${escapeHtml(f.name)}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
                   </div>
                   <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
                 </div>
@@ -416,7 +417,7 @@ export function openCountriesModal(shadowRoot, films) {
         ${countries.map(([code, countryFilms], i) => `
           <div class="lbs-country-row" data-idx="${i}">
             <div class="lbs-country-header">
-              <span class="lbs-country-name">${code}</span>
+              <span class="lbs-country-name">${escapeHtml(code)}</span>
               <span class="lbs-country-right">
                 <span>${countryFilms.length} film${countryFilms.length !== 1 ? 's' : ''}</span>
                 <span class="lbs-country-chevron">▶</span>
@@ -424,13 +425,13 @@ export function openCountriesModal(shadowRoot, films) {
             </div>
             <div class="lbs-country-films" id="lbs-cf-${i}">
               ${[...countryFilms].sort((a, b) => (b.rating || 0) - (a.rating || 0)).map(f => `
-                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${f.letterboxd_uri}"` : ''}>
+                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${escapeHtml(f.letterboxd_uri)}"` : ''}>
                   ${f.poster
-                    ? `<img class="lbs-film-poster" src="${f.poster}" alt="${f.name}" loading="lazy">`
+                    ? `<img class="lbs-film-poster" src="${escapeHtml(f.poster)}" alt="${escapeHtml(f.name)}" loading="lazy">`
                     : `<div class="lbs-film-poster-placeholder"></div>`
                   }
                   <div class="lbs-film-info">
-                    <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
+                    <div class="lbs-film-title">${escapeHtml(f.name)}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
                   </div>
                   <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
                 </div>

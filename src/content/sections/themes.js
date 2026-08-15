@@ -1,4 +1,5 @@
 import { computeTopKeywords } from '../../lib/stats.js';
+import { escapeHtml } from '../../lib/escape.js';
 
 export const BRAND_COLORS = ['#ff8000', '#00e054', '#40bcf4'];
 export const MIN_SIZE = 11;
@@ -29,10 +30,10 @@ export function renderThemes(films, container, onFilterByKeyword) {
           return `
             <button
               class="lbs-theme-tag"
-              data-keyword="${kw.keyword}"
+              data-keyword="${escapeHtml(kw.keyword)}"
               style="font-size:${size}px; color: ${color}"
               title="${kw.count} films"
-            >${kw.keyword}</button>
+            >${escapeHtml(kw.keyword)}</button>
           `;
         }).join('')}
       </div>

@@ -1,5 +1,6 @@
 import { computeOverview, computeTopDirectors, computeTopActors } from '../../lib/stats.js';
 import { openFilmModal, openDiaryModal, openCountriesModal, openLanguagesModal } from '../modal.js';
+import { escapeHtml } from '../../lib/escape.js';
 
 function getShadowRoot(el) {
   let node = el;
@@ -75,14 +76,14 @@ export function renderOverview(films, diaryEntries, container) {
   function personCard(label, person) {
     if (!person) return '';
     const photo = person.photo
-      ? `<img src="${person.photo}" alt="${person.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`
-      : `<div style="width:100%;height:100%;background:var(--lbs-bg3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--lbs-text-muted);">${person.name.charAt(0)}</div>`;
+      ? `<img src="${escapeHtml(person.photo)}" alt="${escapeHtml(person.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`
+      : `<div style="width:100%;height:100%;background:var(--lbs-bg3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--lbs-text-muted);">${escapeHtml(person.name.charAt(0))}</div>`;
 
     return `
-      <div class="lbs-featured-person" data-person="${person.name}">
-        <div class="lbs-featured-label">${label}</div>
+      <div class="lbs-featured-person" data-person="${escapeHtml(person.name)}">
+        <div class="lbs-featured-label">${escapeHtml(label)}</div>
         <div class="lbs-featured-photo">${photo}</div>
-        <div class="lbs-featured-name">${person.name}</div>
+        <div class="lbs-featured-name">${escapeHtml(person.name)}</div>
         <div class="lbs-featured-count">${person.count} film${person.count !== 1 ? 's' : ''}</div>
       </div>
     `;
@@ -144,8 +145,9 @@ export function renderOverview(films, diaryEntries, container) {
   });
 
   // Featured person clicks
+  const personEls = container.querySelectorAll('.lbs-featured-person');
   if (topActor) {
-    const actorEl = container.querySelector(`.lbs-featured-person[data-person="${topActor.name}"]`);
+    const actorEl = [...personEls].find(el => el.dataset.person === topActor.name);
     if (actorEl) {
       actorEl.style.cursor = 'pointer';
       actorEl.addEventListener('click', () => {
@@ -155,7 +157,7 @@ export function renderOverview(films, diaryEntries, container) {
     }
   }
   if (topDir) {
-    const dirEl = container.querySelector(`.lbs-featured-person[data-person="${topDir.name}"]`);
+    const dirEl = [...personEls].find(el => el.dataset.person === topDir.name);
     if (dirEl) {
       dirEl.style.cursor = 'pointer';
       dirEl.addEventListener('click', () => {

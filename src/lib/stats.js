@@ -12,7 +12,7 @@ export function computeOverview(films) {
   const hours = films.reduce((sum, f) => sum + (f.runtime || 0), 0) / 60;
 
   const countries = new Set(films.flatMap(f => f.origin_country || []).filter(Boolean));
-  const languages = new Set(films.flatMap(f => f.languages || []).filter(Boolean));
+  const languages = new Set(films.map(f => f.original_language).filter(Boolean));
 
   const currentYear = new Date().getFullYear();
   const thisYear = films.filter(f => {
@@ -165,10 +165,8 @@ export function computeLanguageBreakdown(films) {
   const totals = {};
 
   for (const film of films) {
-    if (!film.languages || !film.languages.length) continue;
-    for (const lang of film.languages) {
-      totals[lang] = (totals[lang] || 0) + 1;
-    }
+    if (!film.original_language) continue;
+    totals[film.original_language] = (totals[film.original_language] || 0) + 1;
   }
 
   return totals;
@@ -219,7 +217,7 @@ export function filterFilms(films, filters = {}) {
     }
 
     if (filters.language) {
-      if (!film.languages || !film.languages.includes(filters.language)) return false;
+      if (film.original_language !== filters.language) return false;
     }
 
     return true;

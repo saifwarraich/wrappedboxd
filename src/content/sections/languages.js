@@ -1,6 +1,7 @@
 import { Chart, BarElement, BarController, CategoryScale, LinearScale, Tooltip } from 'chart.js';
 import { computeLanguageBreakdown } from '../../lib/stats.js';
 import { openFilmModal } from '../modal.js';
+import { escapeHtml } from '../../lib/escape.js';
 
 Chart.register(BarElement, BarController, CategoryScale, LinearScale, Tooltip);
 
@@ -30,7 +31,7 @@ export function renderLanguages(films, container) {
           <canvas id="lbs-languages-chart"></canvas>
         </div>
       </div>
-      ${topLanguage ? `<div class="lbs-decades-highlight">Most watched language: <strong>${topLanguage.language}</strong> — ${topLanguage.count} films</div>` : ''}
+      ${topLanguage ? `<div class="lbs-decades-highlight">Most watched language: <strong>${escapeHtml(topLanguage.language)}</strong> — ${topLanguage.count} films</div>` : ''}
     </div>
   `;
 
@@ -68,7 +69,7 @@ export function renderLanguages(films, container) {
       onClick: (event, elements) => {
         if (!elements.length) return;
         const language = entries[elements[0].index].language;
-        const languageFilms = films.filter(f => f.languages && f.languages.includes(language));
+        const languageFilms = films.filter(f => f.original_language === language);
         openFilmModal(container.getRootNode(), language, languageFilms);
       },
       onHover: (event, elements) => {

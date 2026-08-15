@@ -1,6 +1,7 @@
 import { Chart, ArcElement, DoughnutController, BarElement, BarController, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { computeGenreBreakdown } from '../../lib/stats.js';
 import { openFilmModal } from '../modal.js';
+import { escapeHtml } from '../../lib/escape.js';
 
 Chart.register(ArcElement, DoughnutController, BarElement, BarController, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -58,9 +59,9 @@ export function renderGenres(films, container) {
       </div>
       <div class="lbs-genre-pills">
         ${sortedGenres.slice(0, 20).map(([genre, count], i) => `
-          <div class="lbs-genre-pill" data-genre="${genre}" style="cursor:pointer">
+          <div class="lbs-genre-pill" data-genre="${escapeHtml(genre)}" style="cursor:pointer">
             <span class="lbs-genre-dot" style="background:${GENRE_COLORS[i % GENRE_COLORS.length]}"></span>
-            <span class="lbs-genre-name">${genre}</span>
+            <span class="lbs-genre-name">${escapeHtml(genre)}</span>
             <span class="lbs-genre-count">${count}</span>
             <span class="lbs-genre-pct">${Math.round((count / totalFilms) * 100)}%</span>
           </div>

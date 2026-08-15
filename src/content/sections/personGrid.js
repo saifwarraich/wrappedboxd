@@ -1,4 +1,5 @@
 import { openFilmModal } from '../modal.js';
+import { escapeHtml } from '../../lib/escape.js';
 
 export function getInitials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -17,17 +18,17 @@ export function renderPersonGrid(people, allFilms, container, entityType, filter
     const shown = sorted.slice(0, showAll ? EXPANDED_LIMIT : INITIAL_LIMIT);
 
     return shown.map(person => `
-      <div class="lbs-person-card" data-name="${person.name}" style="cursor:pointer">
+      <div class="lbs-person-card" data-name="${escapeHtml(person.name)}" style="cursor:pointer">
         <div class="lbs-person-photo">
           ${person.photo
-            ? `<img src="${person.photo}" alt="${person.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+            ? `<img src="${escapeHtml(person.photo)}" alt="${escapeHtml(person.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
             : ''}
           <div class="lbs-person-initials" style="${person.photo ? 'display:none' : ''}">
-            ${getInitials(person.name)}
+            ${escapeHtml(getInitials(person.name))}
           </div>
         </div>
         <div class="lbs-person-info">
-          <div class="lbs-person-name">${person.name}</div>
+          <div class="lbs-person-name">${escapeHtml(person.name)}</div>
           <div class="lbs-person-count">${person.count} film${person.count !== 1 ? 's' : ''}</div>
           ${person.avgRating !== null ? `<div class="lbs-person-rating">★ ${person.avgRating.toFixed(1)}</div>` : ''}
         </div>

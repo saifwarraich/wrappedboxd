@@ -1,3 +1,9 @@
+// Bump whenever a local (non-TMDB) data-correction pass needs to run once
+// for existing users — e.g. clearing first_watched/last_watched values that
+// were wrongly derived from ratings.csv/watched.csv's log date instead of a
+// real watched date (see correctWatchDates below).
+export const DATE_DATA_VERSION = 1;
+
 const DB_NAME = 'letterboxd_stats_v1';
 const DB_VERSION = 2;
 
@@ -106,6 +112,54 @@ export async function upsertFilms(films) {
     count++;
   }
   return count;
+}
+
+/**
+ * Corrects watch dates that were wrongly populated by a past bug: films
+ * sourced from ratings.csv/watched.csv had their "Date" column (when the
+ * entry was logged/rated, not when it was watched) written into
+ * first_watched/last_watched. A film that also has real diary entries can
+ * still be corrupted — e.g. a later fake ratings-date could have won the
+ * old "keep latest" merge over an earlier real diary date — so dates are
+ * recomputed from diary_entries (the only source never affected by the
+ * bug) rather than trusting the existing film record. Films with no diary
+ * entries get first_watched/last_watched cleared to null, since we have no
+ * reliable watch date for them at all.
+ *
+ * Uses a direct put() rather than upsertFilm()/mergeFilm() because the
+ * merge rules can only overwrite a date with a later truthy value — they
+ * can never clear one back to null.
+ * Returns the number of films corrected.
+ */
+export async function correctWatchDates(films) {
+  const db = await getDB();
+  const allDiaryEntries = await getAllDiaryEntries();
+  const entriesByFilm = new Map();
+  for (const entry of allDiaryEntries) {
+    if (!entriesByFilm.has(entry.letterboxd_id)) entriesByFilm.set(entry.letterboxd_id, []);
+    entriesByFilm.get(entry.letterboxd_id).push(entry.watched_date);
+  }
+
+  const updates = [];
+  for (const film of films) {
+    const dates = entriesByFilm.get(film.letterboxd_id) || [];
+    const first_watched = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
+    const last_watched = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+    if (film.first_watched !== first_watched || film.last_watched !== last_watched) {
+      updates.push({ ...film, first_watched, last_watched });
+    }
+  }
+  if (!updates.length) return 0;
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILMS_STORE, 'readwrite');
+    const store = tx.objectStore(FILMS_STORE);
+    for (const film of updates) {
+      store.put(film);
+    }
+    tx.oncomplete = () => resolve(updates.length);
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 export async function getFilmCount() {
@@ -251,6 +305,7 @@ function mergeFilm(existing, incoming) {
     merged.runtime = incoming.runtime;
     merged.origin_country = incoming.origin_country;
     merged.languages = incoming.languages;
+    merged.original_language = incoming.original_language;
     merged.enriched = true;
     merged.enriched_at = incoming.enriched_at;
   }

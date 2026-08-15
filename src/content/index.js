@@ -1,4 +1,4 @@
-import { initDB, getAllFilms, getFilmCount, getAllDiaryEntries, upsertFilms } from '../lib/db.js';
+import { initDB, getAllFilms, getFilmCount, getAllDiaryEntries, upsertFilms, correctWatchDates, DATE_DATA_VERSION } from '../lib/db.js';
 import { fetchRSS, syncRSS } from '../lib/rss.js';
 import { enrichFilms, ENRICHMENT_DATA_VERSION } from '../lib/tmdb.js';
 import {
@@ -46,6 +46,7 @@ async function main() {
       'last_full_sync',
       'onboarded',
       'cast_data_version',
+      'date_data_version',
     ]);
   } catch (err) {
     console.warn('[LBS] chrome.storage unavailable', err);
@@ -100,6 +101,7 @@ async function handleOwnProfile(panel, shadow, username, settings) {
       onEnrich: async (enrichedFilms) => {
         settings.onboarded = true;
         settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+        settings.date_data_version = DATE_DATA_VERSION;
         await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
       },
     });
@@ -138,22 +140,38 @@ async function loadAndShowStats(panel, shadow, username, settings, initialFilms)
         onEnrich: async (enrichedFilms) => {
           settings.onboarded = true;
           settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+          settings.date_data_version = DATE_DATA_VERSION;
           await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
         },
       });
     },
   });
 
-  // One-time background migration: if TMDB extraction logic changed since this
-  // user's films were last enriched (e.g. cast list used to be truncated to
-  // top 5), silently re-enrich everything once and bump cast_data_version so
-  // it never runs again.
-  if (settings.cast_data_version !== ENRICHMENT_DATA_VERSION && allFilms.length > 0) {
+  // One-time background migrations, combined into a single pass + toast:
+  //   - cast_data_version: TMDB extraction logic changed (e.g. cast list used
+  //     to be truncated to top 5) — silently re-enrich everything from TMDB.
+  //   - date_data_version: a past bug wrote ratings.csv/watched.csv's log
+  //     date into first_watched/last_watched as if it were a real watched
+  //     date — recompute those fields from diary entries (local only, no
+  //     TMDB calls needed).
+  // Each runs independently based on its own stale flag, so a user only
+  // behind on one of them isn't made to wait on the other.
+  const needsEnrichment = settings.cast_data_version !== ENRICHMENT_DATA_VERSION;
+  const needsDateCorrection = settings.date_data_version !== DATE_DATA_VERSION;
+
+  if ((needsEnrichment || needsDateCorrection) && allFilms.length > 0) {
     try {
-      const reEnriched = await enrichFilms(allFilms, null);
-      await upsertFilms(reEnriched);
-      await chrome.storage.local.set({ cast_data_version: ENRICHMENT_DATA_VERSION });
-      settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+      if (needsEnrichment) {
+        const reEnriched = await enrichFilms(allFilms, null);
+        await upsertFilms(reEnriched);
+        await chrome.storage.local.set({ cast_data_version: ENRICHMENT_DATA_VERSION });
+        settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+      }
+      if (needsDateCorrection) {
+        await correctWatchDates(await getAllFilms());
+        await chrome.storage.local.set({ date_data_version: DATE_DATA_VERSION });
+        settings.date_data_version = DATE_DATA_VERSION;
+      }
 
       allFilms = await getAllFilms();
       renderFullPanel(panel, allFilms, allDiaryEntries, true, username, settings, {
@@ -164,7 +182,7 @@ async function loadAndShowStats(panel, shadow, username, settings, initialFilms)
       });
       showToast(shadow, '✓ Refreshed your film data');
     } catch (err) {
-      console.warn('[LBS] Background enrichment-data migration failed:', err);
+      console.warn('[LBS] Background data migration failed:', err);
     }
   }
 
