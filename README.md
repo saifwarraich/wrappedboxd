@@ -29,12 +29,7 @@ Stats only appear on your own profile. Other profiles show lightweight stats fro
 
 ## Install
 
-Download the latest release from the [Releases page](../../releases), then:
-
-1. Go to `chrome://extensions`
-2. Enable **Developer mode** (top right toggle)
-3. Click **Load unpacked**
-4. Select the downloaded folder
+Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd).
 
 ---
 
