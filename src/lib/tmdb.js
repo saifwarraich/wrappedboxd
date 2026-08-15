@@ -1,3 +1,10 @@
+// Bump this whenever a change to enrichFilm()'s extraction logic means
+// previously-enriched films in IndexedDB need to be re-fetched from TMDB to
+// pick up the fix or a newly-added field (e.g. cast list was truncated to
+// top 5 before v2; language data was added in v3, but a mergeFilm() bug
+// dropped it on the way into IndexedDB until v4 — see db.js).
+export const ENRICHMENT_DATA_VERSION = 4;
+
 const PROXY_BASE = 'https://unboxd-proxy.vercel.app/api/tmdb';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w185';
 const BATCH_SIZE = 40;
@@ -46,7 +53,7 @@ function extractDirector(credits) {
 
 function extractCast(credits) {
   if (!credits || !credits.cast) return [];
-  return credits.cast.slice(0, 5).map(person => ({
+  return credits.cast.map(person => ({
     name: person.name,
     id: person.id,
     photo: person.profile_path ? `${IMAGE_BASE}${person.profile_path}` : null,
@@ -56,6 +63,13 @@ function extractCast(credits) {
 function extractKeywords(keywordsData) {
   if (!keywordsData || !keywordsData.keywords) return [];
   return keywordsData.keywords.map(k => k.name);
+}
+
+function extractLanguages(details) {
+  if (!details.spoken_languages || !details.spoken_languages.length) return [];
+  return details.spoken_languages
+    .map(l => l.english_name)
+    .filter(Boolean);
 }
 
 export async function enrichFilm(film) {
@@ -77,6 +91,7 @@ export async function enrichFilm(film) {
     const originCountry = details.production_countries
       ? details.production_countries.map(c => c.name).filter(Boolean)
       : [];
+    const languages = extractLanguages(details);
 
     return {
       ...film,
@@ -91,6 +106,7 @@ export async function enrichFilm(film) {
       tmdb_rating: details.vote_average || null,
       runtime: details.runtime || null,
       origin_country: originCountry,
+      languages,
       decade: film.year ? Math.floor(film.year / 10) * 10 : film.decade,
       enriched: true,
       enriched_at: new Date().toISOString(),

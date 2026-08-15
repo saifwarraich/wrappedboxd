@@ -4,11 +4,12 @@ import { renderActors } from './sections/actors.js';
 import { renderGenres } from './sections/genres.js';
 import { renderThemes } from './sections/themes.js';
 import { renderDecades } from './sections/decades.js';
+import { renderLanguages } from './sections/languages.js';
 import { renderRatings } from './sections/ratings.js';
 import { filterFilms } from '../lib/stats.js';
 import { syncRSS } from '../lib/rss.js';
 import { getAllFilms, upsertFilms, upsertDiaryEntries } from '../lib/db.js';
-import { enrichFilms } from '../lib/tmdb.js';
+import { enrichFilms, ENRICHMENT_DATA_VERSION } from '../lib/tmdb.js';
 import { parseLetterboxdCSV } from '../lib/csv.js';
 
 const PANEL_STYLES = `
@@ -49,8 +50,11 @@ const PANEL_STYLES = `
     gap: 12px;
     padding: 14px 20px;
     background: var(--lbs-bg2);
-    border-bottom: 1px solid #2a3440;
     flex-wrap: wrap;
+  }
+
+  .lbs-header:not(:has(+ .lbs-header-caption)) {
+    border-bottom: 1px solid #2a3440;
   }
 
   .lbs-header-title {
@@ -65,6 +69,31 @@ const PANEL_STYLES = `
   .lbs-sync-info {
     font-size: 11px;
     color: var(--lbs-text-muted);
+  }
+
+  .lbs-update-hint {
+    display: block;
+    margin-top: 2px;
+    color: var(--lbs-orange);
+  }
+
+  .lbs-update-hint-link {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .lbs-update-hint-link:hover {
+    color: var(--lbs-text-bright);
+  }
+
+  .lbs-header-caption {
+    padding: 0 20px 10px;
+    margin-top: -8px;
+    text-align: right;
+    font-size: 10px;
+    color: var(--lbs-text-muted);
+    background: var(--lbs-bg2);
+    border-bottom: 1px solid #2a3440;
   }
 
   .lbs-header-actions {
@@ -312,6 +341,7 @@ const PANEL_STYLES = `
 
   .lbs-overview-extras {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 32px;
     margin-top: 20px;
@@ -932,6 +962,7 @@ const OWN_TABS = [
   { id: 'genres', label: 'Genres' },
   { id: 'themes', label: 'Themes' },
   { id: 'decades', label: 'Decades' },
+  { id: 'languages', label: 'Languages' },
   { id: 'ratings', label: 'Ratings' },
 ];
 
@@ -959,17 +990,20 @@ function getFilterOptions(films) {
   const years = new Set();
   const decades = new Set();
   const genres = new Set();
+  const languages = new Set();
 
   for (const f of films) {
     if (f.last_watched) years.add(f.last_watched.substring(0, 4));
     if (f.decade !== null && f.decade !== undefined) decades.add(f.decade);
     if (f.genres) f.genres.forEach(g => genres.add(g));
+    if (f.languages) f.languages.forEach(l => languages.add(l));
   }
 
   return {
     years: Array.from(years).sort((a, b) => b - a),
     decades: Array.from(decades).sort((a, b) => a - b),
     genres: Array.from(genres).sort(),
+    languages: Array.from(languages).sort(),
   };
 }
 
@@ -1250,6 +1284,7 @@ export function renderOnboarding(panel, { onEnrich }) {
       await chrome.storage.local.set({
         onboarded: true,
         last_full_sync: new Date().toISOString(),
+        cast_data_version: ENRICHMENT_DATA_VERSION,
       });
 
       progressBar.style.width = '100%';
@@ -1360,6 +1395,13 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
             ${opts.genres.map(g => `<option value="${g}" ${filters.genre === g ? 'selected' : ''}>${g}</option>`).join('')}
           </select>
         </div>
+        <div class="lbs-filter-group">
+          <span class="lbs-filter-label">Language</span>
+          <select class="lbs-filter-select" id="lbs-filter-language">
+            <option value="">All languages</option>
+            ${opts.languages.map(l => `<option value="${l}" ${filters.language === l ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
         <div class="lbs-active-filters" id="lbs-active-filters">
           ${activeKeys.map(k => `
             <span class="lbs-filter-pill" data-filter="${k}">
@@ -1407,6 +1449,9 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       case 'decades':
         renderDecades(filteredFilms, container);
         break;
+      case 'languages':
+        renderLanguages(filteredFilms, container);
+        break;
       case 'ratings':
         renderRatings(filteredFilms, container, panel.getRootNode());
         break;
@@ -1425,18 +1470,24 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       </div>
     ` : '';
 
+    const needsEnrichmentUpdate = isOwnProfile && settings.cast_data_version !== ENRICHMENT_DATA_VERSION;
+
     panel.innerHTML = `
       <div class="lbs-header">
         <div class="lbs-header-title"><span style="color:var(--lbs-orange)">Wrapped</span><span style="color:var(--lbs-green)">Box</span><span style="color:#40bcf4">d</span></div>
-        <div class="lbs-sync-info">Last synced ${syncTime}</div>
+        <div class="lbs-sync-info">
+          Last synced ${syncTime}
+          ${needsEnrichmentUpdate ? `<span class="lbs-update-hint" id="lbs-update-hint">New film data available — <span class="lbs-update-hint-link" id="lbs-update-hint-link">update now</span></span>` : ''}
+        </div>
         <div class="lbs-header-actions">
           ${isOwnProfile ? `
             <button class="lbs-btn" id="lbs-filter-toggle">Filters ${Object.keys(filters).filter(k => filters[k]).length > 0 ? '●' : '▾'}</button>
-            <button class="lbs-btn lbs-btn--green" id="lbs-sync-btn">Sync ↻</button>
+            <button class="lbs-btn lbs-btn--green" id="lbs-sync-btn" title="Shift+click to fully re-enrich all films from TMDB">Sync ↻</button>
             <button class="lbs-btn ${settingsVisible ? 'lbs-btn--green' : ''}" id="lbs-settings-toggle">Settings ⚙</button>
           ` : ''}
         </div>
       </div>
+      ${isOwnProfile ? `<div class="lbs-header-caption">Shift+click Sync ↻ to fully re-enrich all films from TMDB</div>` : ''}
       ${bannerHTML}
       ${isOwnProfile ? buildSettingsPanel() : ''}
       ${isOwnProfile ? buildFilterBar() : ''}
@@ -1473,6 +1524,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       const yearSel = panel.querySelector('#lbs-filter-year');
       const decadeSel = panel.querySelector('#lbs-filter-decade');
       const genreSel = panel.querySelector('#lbs-filter-genre');
+      const languageSel = panel.querySelector('#lbs-filter-language');
 
       if (yearSel) {
         yearSel.addEventListener('change', () => {
@@ -1491,6 +1543,13 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
       if (genreSel) {
         genreSel.addEventListener('change', () => {
           filters.genre = genreSel.value || null;
+          filteredFilms = filterFilms(allFilms, filters);
+          render();
+        });
+      }
+      if (languageSel) {
+        languageSel.addEventListener('change', () => {
+          filters.language = languageSel.value || null;
           filteredFilms = filterFilms(allFilms, filters);
           render();
         });
@@ -1597,7 +1656,7 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
             });
             await upsertFilms(enriched);
             await upsertDiaryEntries(suDiaryEntries);
-            await chrome.storage.local.set({ onboarded: true, last_full_sync: new Date().toISOString() });
+            await chrome.storage.local.set({ onboarded: true, last_full_sync: new Date().toISOString(), cast_data_version: ENRICHMENT_DATA_VERSION });
             settingsEnrichStatus.innerHTML = '<span style="color:var(--lbs-green)">Done! Reloading stats...</span>';
             const refreshed = await getAllFilms();
             allFilms = refreshed;
@@ -1612,6 +1671,16 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
         });
       }
 
+      // "update now" hint link — triggers the same full re-enrich as shift+click Sync
+      const updateHintLink = panel.querySelector('#lbs-update-hint-link');
+      if (updateHintLink) {
+        updateHintLink.addEventListener('click', () => {
+          panel.querySelector('#lbs-sync-btn')?.dispatchEvent(
+            new MouseEvent('click', { shiftKey: true, bubbles: true })
+          );
+        });
+      }
+
       // Sync button
       const syncBtn = panel.querySelector('#lbs-sync-btn');
       if (syncBtn) {
@@ -1623,11 +1692,14 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
 
           try {
             if (isFullSync) {
-              // Re-enrich all unenriched films
+              // Re-enrich every film from scratch (not just unenriched ones) so
+              // fixes to TMDB extraction (e.g. cast list size) reach existing data.
               const films = await getAllFilms();
-              const unenriched = films.filter(f => !f.enriched);
-              if (unenriched.length) {
-                await enrichFilms(unenriched, null);
+              if (films.length) {
+                const reEnriched = await enrichFilms(films, null);
+                await upsertFilms(reEnriched);
+                await chrome.storage.local.set({ cast_data_version: ENRICHMENT_DATA_VERSION });
+                settings.cast_data_version = ENRICHMENT_DATA_VERSION;
               }
             }
             const result = await syncRSS(username);
@@ -1637,6 +1709,9 @@ export function renderFullPanel(panel, allFilms, allDiaryEntries, isOwnProfile, 
           } catch (err) {
             console.warn('[LBS] Sync error', err);
           }
+
+          allFilms = await getAllFilms();
+          filteredFilms = filterFilms(allFilms, filters);
 
           syncBtn.classList.remove('lbs-btn--spinning');
           syncBtn.disabled = false;

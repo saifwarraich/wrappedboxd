@@ -1,5 +1,6 @@
-import { initDB, getAllFilms, getFilmCount, getAllDiaryEntries } from '../lib/db.js';
+import { initDB, getAllFilms, getFilmCount, getAllDiaryEntries, upsertFilms } from '../lib/db.js';
 import { fetchRSS, syncRSS } from '../lib/rss.js';
+import { enrichFilms, ENRICHMENT_DATA_VERSION } from '../lib/tmdb.js';
 import {
   injectPanel,
   renderLoadingState,
@@ -44,6 +45,7 @@ async function main() {
       'last_rss_sync',
       'last_full_sync',
       'onboarded',
+      'cast_data_version',
     ]);
   } catch (err) {
     console.warn('[LBS] chrome.storage unavailable', err);
@@ -97,6 +99,7 @@ async function handleOwnProfile(panel, shadow, username, settings) {
     renderOnboarding(panel, {
       onEnrich: async (enrichedFilms) => {
         settings.onboarded = true;
+        settings.cast_data_version = ENRICHMENT_DATA_VERSION;
         await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
       },
     });
@@ -134,11 +137,36 @@ async function loadAndShowStats(panel, shadow, username, settings, initialFilms)
       renderOnboarding(panel, {
         onEnrich: async (enrichedFilms) => {
           settings.onboarded = true;
+          settings.cast_data_version = ENRICHMENT_DATA_VERSION;
           await loadAndShowStats(panel, shadow, username, settings, enrichedFilms);
         },
       });
     },
   });
+
+  // One-time background migration: if TMDB extraction logic changed since this
+  // user's films were last enriched (e.g. cast list used to be truncated to
+  // top 5), silently re-enrich everything once and bump cast_data_version so
+  // it never runs again.
+  if (settings.cast_data_version !== ENRICHMENT_DATA_VERSION && allFilms.length > 0) {
+    try {
+      const reEnriched = await enrichFilms(allFilms, null);
+      await upsertFilms(reEnriched);
+      await chrome.storage.local.set({ cast_data_version: ENRICHMENT_DATA_VERSION });
+      settings.cast_data_version = ENRICHMENT_DATA_VERSION;
+
+      allFilms = await getAllFilms();
+      renderFullPanel(panel, allFilms, allDiaryEntries, true, username, settings, {
+        onNewFilms: (count) => {
+          showToast(shadow, `↻ ${count} new film${count !== 1 ? 's' : ''} synced`);
+        },
+        onUploadCSV: () => {},
+      });
+      showToast(shadow, '✓ Refreshed your film data');
+    } catch (err) {
+      console.warn('[LBS] Background enrichment-data migration failed:', err);
+    }
+  }
 
   // Background RSS sync
   try {

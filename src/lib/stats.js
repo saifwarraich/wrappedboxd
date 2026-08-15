@@ -12,6 +12,7 @@ export function computeOverview(films) {
   const hours = films.reduce((sum, f) => sum + (f.runtime || 0), 0) / 60;
 
   const countries = new Set(films.flatMap(f => f.origin_country || []).filter(Boolean));
+  const languages = new Set(films.flatMap(f => f.languages || []).filter(Boolean));
 
   const currentYear = new Date().getFullYear();
   const thisYear = films.filter(f => {
@@ -26,6 +27,7 @@ export function computeOverview(films) {
     hours: Math.round(hours),
     avgRating: Math.round(avgRating * 10) / 10,
     countries,
+    languages,
     thisYear,
     rewatches,
   };
@@ -159,6 +161,19 @@ export function computeDecades(films) {
   return decades;
 }
 
+export function computeLanguageBreakdown(films) {
+  const totals = {};
+
+  for (const film of films) {
+    if (!film.languages || !film.languages.length) continue;
+    for (const lang of film.languages) {
+      totals[lang] = (totals[lang] || 0) + 1;
+    }
+  }
+
+  return totals;
+}
+
 export function computeRatingDistribution(films) {
   const dist = {};
   const steps = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
@@ -201,6 +216,10 @@ export function filterFilms(films, filters = {}) {
 
     if (filters.genre) {
       if (!film.genres || !film.genres.includes(filters.genre)) return false;
+    }
+
+    if (filters.language) {
+      if (!film.languages || !film.languages.includes(filters.language)) return false;
     }
 
     return true;

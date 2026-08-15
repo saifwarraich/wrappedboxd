@@ -308,6 +308,84 @@ export function openDiaryModal(shadowRoot, diaryEntries, filmsMap) {
   shadowRoot.appendChild(backdrop);
 }
 
+export function openLanguagesModal(shadowRoot, films) {
+  ensureStyles(shadowRoot);
+  shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();
+
+  // Group by language — a film with multiple spoken languages appears under each
+  const languageMap = new Map();
+  for (const film of films) {
+    for (const language of (film.languages || [])) {
+      if (!languageMap.has(language)) languageMap.set(language, []);
+      languageMap.get(language).push(film);
+    }
+  }
+  const languages = [...languageMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'lbs-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="lbs-modal">
+      <div class="lbs-modal-header">
+        <div class="lbs-modal-title">
+          Languages
+          <span class="lbs-modal-count">${languages.length} language${languages.length !== 1 ? 's' : ''}</span>
+        </div>
+        <button class="lbs-modal-close">✕</button>
+      </div>
+      <div class="lbs-modal-body">
+        ${languages.map(([language, languageFilms], i) => `
+          <div class="lbs-country-row" data-idx="${i}">
+            <div class="lbs-country-header">
+              <span class="lbs-country-name">${language}</span>
+              <span class="lbs-country-right">
+                <span>${languageFilms.length} film${languageFilms.length !== 1 ? 's' : ''}</span>
+                <span class="lbs-country-chevron">▶</span>
+              </span>
+            </div>
+            <div class="lbs-country-films" id="lbs-lf-${i}">
+              ${[...languageFilms].sort((a, b) => (b.rating || 0) - (a.rating || 0)).map(f => `
+                <div class="lbs-country-film-item ${f.letterboxd_uri ? 'lbs-film-row--link' : ''}" ${f.letterboxd_uri ? `data-uri="${f.letterboxd_uri}"` : ''}>
+                  ${f.poster
+                    ? `<img class="lbs-film-poster" src="${f.poster}" alt="${f.name}" loading="lazy">`
+                    : `<div class="lbs-film-poster-placeholder"></div>`
+                  }
+                  <div class="lbs-film-info">
+                    <div class="lbs-film-title">${f.name}${f.year ? ` <span style="color:#678;font-weight:400">${f.year}</span>` : ''}</div>
+                  </div>
+                  <div class="lbs-film-rating">${f.rating ? '★ ' + f.rating.toFixed(1) : '—'}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('.lbs-modal-close').addEventListener('click', () => backdrop.remove());
+
+  backdrop.querySelectorAll('.lbs-country-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const list = row.querySelector('.lbs-country-films');
+      const chevron = row.querySelector('.lbs-country-chevron');
+      const open = list.classList.toggle('open');
+      chevron.style.transform = open ? 'rotate(90deg)' : '';
+    });
+  });
+
+  backdrop.querySelectorAll('.lbs-film-row--link').forEach(row => {
+    row.addEventListener('click', e => {
+      e.stopPropagation();
+      window.open(row.dataset.uri, '_blank', 'noopener');
+    });
+  });
+
+  shadowRoot.appendChild(backdrop);
+}
+
 export function openCountriesModal(shadowRoot, films) {
   ensureStyles(shadowRoot);
   shadowRoot.querySelector('.lbs-modal-backdrop')?.remove();

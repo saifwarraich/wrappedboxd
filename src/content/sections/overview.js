@@ -1,5 +1,5 @@
 import { computeOverview, computeTopDirectors, computeTopActors } from '../../lib/stats.js';
-import { openFilmModal, openDiaryModal, openCountriesModal } from '../modal.js';
+import { openFilmModal, openDiaryModal, openCountriesModal, openLanguagesModal } from '../modal.js';
 
 function getShadowRoot(el) {
   let node = el;
@@ -53,6 +53,12 @@ export function renderOverview(films, diaryEntries, container) {
       countries: true,
     },
     {
+      label: 'Languages',
+      value: stats.languages.size.toString(),
+      films: null,
+      languages: true,
+    },
+    {
       label: 'This Year',
       value: stats.thisYear.toLocaleString(),
       films: films.filter(f => f.last_watched && parseInt(f.last_watched.substring(0, 4), 10) === currentYear),
@@ -97,7 +103,7 @@ export function renderOverview(films, diaryEntries, container) {
     </div>
     <div class="lbs-overview-extras">
       ${extras.map((e, i) => `
-        <div class="lbs-extra-stat ${e.films || e.countries ? 'lbs-clickable' : ''}" data-extra="${i}">
+        <div class="lbs-extra-stat ${e.films || e.countries || e.languages ? 'lbs-clickable' : ''}" data-extra="${i}">
           <span class="lbs-extra-value">${e.value}</span>
           <span class="lbs-extra-label">${e.label}</span>
         </div>
@@ -130,6 +136,8 @@ export function renderOverview(films, diaryEntries, container) {
     const e = extras[parseInt(el.dataset.extra)];
     if (e.countries) {
       el.addEventListener('click', () => openCountriesModal(root, films));
+    } else if (e.languages) {
+      el.addEventListener('click', () => openLanguagesModal(root, films));
     } else if (e.films) {
       el.addEventListener('click', () => openFilmModal(root, e.title, e.films));
     }

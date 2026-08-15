@@ -43,6 +43,7 @@ letterboxd-extension/
 │   │   │   ├── genres.js       ← genre chart + timeline
 │   │   │   ├── themes.js       ← keyword/theme tag cloud
 │   │   │   ├── decades.js      ← decade bar chart
+│   │   │   ├── languages.js    ← language bar chart
 │   │   │   └── ratings.js      ← rating histogram + scatter
 │   │   └── content.css     ← all injected styles
 │   ├── lib/
@@ -89,13 +90,16 @@ Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (
   cast: [
     { name: "Brad Pitt", id: 287, photo: "https://..." },
     { name: "Edward Norton", id: 819, photo: "https://..." },
-    // top 5 only
+    // full credited cast, in TMDB billing order — not truncated, so
+    // lower-billed ensemble actors (e.g. recurring franchise roles) still
+    // count correctly in computeTopActors
   ],
   keywords: ["fight club", "nihilism", "masculinity", "twist ending"],
   poster: "https://image.tmdb.org/t/p/w185/...",
   tmdb_rating: 8.4,
   runtime: 139,
   origin_country: ["United States of America", "United Kingdom"],  // array of full country names from TMDB production_countries
+  languages: ["English", "German"],    // array of full language names from TMDB spoken_languages
   enriched: true,                      // false if TMDB fetch failed/pending
   enriched_at: "2024-03-01T12:00:00Z"
 }
@@ -128,7 +132,8 @@ Two IndexedDB stores: `films` (one record per unique film) and `diary_entries` (
   own_username: "yourname",           // set on first visit, from page DOM
   last_rss_sync: "2024-03-01T12:00:00Z",
   last_full_sync: "2024-03-01T12:00:00Z",
-  onboarded: false
+  onboarded: false,
+  cast_data_version: 4                // see ENRICHMENT_DATA_VERSION migration below
 }
 ```
 
@@ -261,7 +266,7 @@ No `api_key` parameter is ever sent from the client — the proxy handles auth.
    → take first result's `id`
 
 2. **Film details** — `GET /api/tmdb?endpoint=movie/{id}&append_to_response=credits,keywords`
-   → extract genres (all, as array), runtime, origin_country (array of full names from `production_countries`), vote_average, credits (cast top 5 + director), keywords
+   → extract genres (all, as array), runtime, origin_country (array of full names from `production_countries`), languages (array of full names from `spoken_languages[].english_name`), vote_average, credits (full cast list, in billing order, + director), keywords
 
 3. **Person image** — from credits response, `profile_path` field
    → full URL: `https://image.tmdb.org/t/p/w185{profile_path}`
@@ -326,7 +331,7 @@ Pure functions. All take `films[]` as first argument. Return plain objects/array
 
 ```js
 computeOverview(films)
-// → { total, hours, avgRating, countries: Set, thisYear, rewatches }
+// → { total, hours, avgRating, countries: Set, languages: Set, thisYear, rewatches }
 
 computeTopDirectors(films, limit = 10)
 // → [{ name, id, photo, count, avgRating }, ...]
@@ -343,6 +348,9 @@ computeTopKeywords(films, limit = 30)
 computeDecades(films)
 // → { 1970: 3, 1980: 12, 1990: 45, ... }
 
+computeLanguageBreakdown(films)
+// → { English: 120, French: 8, ... } — a film with multiple spoken_languages counts under each
+
 computeRatingDistribution(films)
 // → { "0.5": 2, "1.0": 5, ..., "5.0": 34 }
 
@@ -350,7 +358,7 @@ computeRatingVsTmdb(films)
 // → [{ name, yourRating, tmdbRating }, ...] for films where both exist
 
 filterFilms(films, filters)
-// filters: { yearWatched, decade, genre } — all optional, AND logic
+// filters: { yearWatched, decade, genre, language } — all optional, AND logic
 // → filtered Film[]
 ```
 
@@ -409,6 +417,7 @@ The panel is a `<div id="lbs-stats-panel">` with a shadow DOM to avoid CSS confl
 │  Genres  │  [doughnut + timeline chart]             │
 │  Themes  │  [keyword tag cloud]                     │
 │  Decades │  [horizontal bar chart]                  │
+│ Languages│  [horizontal bar chart]                  │
 │  Ratings │  [histogram + scatter]                   │
 └──────────┴──────────────────────────────────────────┘
 ```
@@ -453,12 +462,15 @@ Films Logged = `diaryEntries.length` (actual diary entries, filtered by active f
 |---|---|
 | Films Watched | opens film modal of all films |
 | Countries | opens countries modal |
+| Languages | opens languages modal |
 | This Year | opens film modal of films watched this year |
 | Rewatches | opens film modal of rewatched films |
 
 Below: featured person cards for Most Watched Actor and Most Watched Director (clickable → film modal filtered by that person).
 
 Countries modal: groups films by each country in `origin_country` array (a film appears under every country it belongs to). Rows are expandable. No flag emojis.
+
+Languages modal: identical structure to the countries modal, grouping by each entry in `languages` array (a film with multiple spoken languages appears under each). Implemented as `openLanguagesModal` in `src/content/modal.js`, reusing the same `.lbs-country-*` row/expand CSS classes since the styling is generic.
 
 ---
 
@@ -512,6 +524,17 @@ Highlight the decade with most films.
 
 ---
 
+## src/content/sections/languages.js
+
+Horizontal bar chart, same visual treatment as decades.js. Y-axis = spoken
+language name (top 15 by count). X-axis = film count. A film with multiple
+`spoken_languages` counts under each language it appears in. Bars filled
+with green gradient, top language highlighted solid green. Clicking a bar
+opens the film modal filtered to that language. Own-profile only — RSS-only
+data (other profiles) isn't enriched, so `film.languages` is never populated.
+
+---
+
 ## src/content/sections/ratings.js
 
 Two charts:
@@ -527,11 +550,12 @@ Each dot = one film. Hover tooltip shows film name. Color: dots above diagonal =
 ## Filters
 
 A filter bar appears below the panel header when "Filters" is clicked.
-Three dropdowns:
+Four dropdowns:
 
 - **Year watched** — all years present in diary
 - **Decade of film** — 1920s through 2020s
 - **Genre** — all genres present
+- **Language** — all languages present (from `film.languages`)
 
 Selecting a filter calls `filterFilms()` and re-renders all sections reactively.
 Active filters shown as dismissible pills.
@@ -576,10 +600,42 @@ Chart.js global defaults: set `color`, `borderColor`, `backgroundColor` to match
 
 ### Sync button (manual)
 - Clicking "Sync ↻" in panel header: runs `syncRSS()` with visual spinner
-- Long-press or shift+click: runs full re-enrichment of all unenriched films
+- Long-press or shift+click: runs full re-enrichment of **all** films from TMDB (not just unenriched ones), so extraction fixes/changes propagate to already-enriched data
 
 ### Last synced indicator
 Show "Last synced 2h ago" in muted text in panel header.
+
+### Enrichment data-version migration
+
+`ENRICHMENT_DATA_VERSION` (in `src/lib/tmdb.js`) is bumped whenever a change
+to `enrichFilm()`'s extraction logic — a fix, or a newly-added field like
+`languages` — means previously-enriched films need to be re-fetched from
+TMDB to pick up the change. Existing users don't need to know this happened
+or take any action:
+
+- On every own-profile load, compare `chrome.storage.local.cast_data_version`
+  to `ENRICHMENT_DATA_VERSION`. If they differ and the user has films,
+  silently `enrichFilms()` + `upsertFilms()` all films in the background,
+  same as the Sync button's full re-enrich, then bump the stored version so
+  it only runs once. Show a toast ("✓ Refreshed your film data") and
+  re-render.
+- New onboardings and the settings-panel upload flow always stamp
+  `cast_data_version: ENRICHMENT_DATA_VERSION` on completion, since they run
+  through the current `enrichFilm()` already — they never need the
+  migration.
+- The storage key stays `cast_data_version` even though the constant is now
+  named more generally — renaming the stored key isn't necessary since a
+  version bump alone is what triggers the migration for existing users.
+- The background migration isn't guaranteed to run (e.g. it's skipped if the
+  content script's `chrome.*` context was invalidated by an extension reload
+  mid-session — see the "Extension context invalidated" case). So this isn't
+  purely silent: whenever `settings.cast_data_version !== ENRICHMENT_DATA_VERSION`
+  for an own profile, the panel header shows a small orange hint next to
+  "Last synced" — *"New film data available — update now"*. Clicking the link
+  dispatches a synthetic shift-click on the Sync button, running the exact
+  same full re-enrich path (no duplicated logic). The hint disappears on the
+  next render once `cast_data_version` catches up, whether that happened via
+  the silent background migration, this manual link, or a real shift+click.
 
 ---
 

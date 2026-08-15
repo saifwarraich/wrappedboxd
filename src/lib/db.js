@@ -250,6 +250,7 @@ function mergeFilm(existing, incoming) {
     merged.tmdb_rating = incoming.tmdb_rating;
     merged.runtime = incoming.runtime;
     merged.origin_country = incoming.origin_country;
+    merged.languages = incoming.languages;
     merged.enriched = true;
     merged.enriched_at = incoming.enriched_at;
   }

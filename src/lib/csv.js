@@ -85,6 +85,7 @@ function blankTmdbFields() {
     tmdb_rating: null,
     runtime: null,
     origin_country: null,
+    languages: [],
     enriched: false,
     enriched_at: null,
   };
