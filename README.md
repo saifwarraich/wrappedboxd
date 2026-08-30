@@ -4,13 +4,26 @@
 
 <h1 align="center">WrappedBoxd</h1>
 
-<p align="center">A Chrome extension that injects a rich stats panel into your Letterboxd profile page.</p>
+<p align="center">
+  A Chrome extension that injects a rich stats panel into your Letterboxd profile page.
+</p>
+
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd">
+    <img src="https://img.shields.io/badge/Install%20on-Chrome-4285F4?logo=googlechrome&logoColor=white" alt="Install on Chrome" />
+  </a>
+  
+  <a href="https://addons.mozilla.org/addon/wrappedboxd/">
+    <img src="https://img.shields.io/badge/Install%20on-Firefox-FF7139?logo=firefoxbrowser&logoColor=white" alt="Install on Firefox" />
+  </a>
+</p>
 
 <p align="center">
   <img src="screenshot/overview.png" alt="WrappedBoxd stats panel" />
 </p>
 
 ---
+
 
 ## Features
 
@@ -24,16 +37,6 @@
 - **Sync** — Background RSS sync on page load, manual sync button
 
 Stats only appear on your own profile. Other profiles show lightweight stats from their public activity feed.
-
----
-
-## Install
-
-## Install
-
-[![Install on Chrome](https://img.shields.io/badge/Install%20on-Chrome-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd)
-
-[![Install on Firefox](https://img.shields.io/badge/Install%20on-Firefox-FF7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/addon/wrappedboxd/)
 
 ---
 
