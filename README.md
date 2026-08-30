@@ -29,7 +29,11 @@ Stats only appear on your own profile. Other profiles show lightweight stats fro
 
 ## Install
 
-Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd).
+## Install
+
+[![Install on Chrome](https://img.shields.io/badge/Install%20on-Chrome-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd)
+
+[![Install on Firefox](https://img.shields.io/badge/Install%20on-Firefox-FF7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/addon/wrappedboxd/)
 
 ---
 
