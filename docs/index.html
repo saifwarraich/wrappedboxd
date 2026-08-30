@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="WrappedBoxd turns your Letterboxd watch history into a rich stats panel: directors, actors, genres, decades, ratings, and more, right on your profile.">
+<link rel="icon" href="./assets/icon.png">
+<title>WrappedBoxd</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0d1013;
+    --bg2: #171b20;
+    --bg3: #1f262d;
+    --border: #2a333b;
+    --text-bright: #f4f7f6;
+    --text: #9fb2ae;
+    --text-muted: #5c6b68;
+    --green: #00e054;
+    --green-dim: #00b544;
+    --orange: #ff8000;
+    --blue: #4da6ff;
+    --radius: 4px;
+    --radius-lg: 10px;
+    --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+  ::selection { background: var(--green); color: #06120a; }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  h1, h2, h3 { font-family: var(--serif); color: var(--text-bright); font-weight: 600; text-wrap: balance; margin: 0; }
+  .mono { font-family: var(--mono); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ---------- nav ---------- */
+  header.site {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(13, 16, 19, 0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+  .wordmark {
+    display: flex;
+    align-items: center;
+  }
+  .wordmark-text {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .wordmark-text .a { color: var(--orange); }
+  .wordmark-text .b { color: var(--green); }
+  .wordmark-text .c { color: var(--blue); }
+  nav.links { display: flex; gap: 28px; }
+  nav.links a {
+    text-decoration: none;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  nav.links a:hover, nav.links a:focus-visible { color: var(--text-bright); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  .btn-primary { background: #e07300; color: #fff; }
+  .btn-primary:hover { background: #c56300; transform: translateY(-1px); }
+  .btn-firefox { background: var(--green-dim); color: #fff; }
+  .btn-firefox:hover { background: #009a3b; transform: translateY(-1px); }
+  .btn-ghost { background: #3b8fe6; color: #fff; }
+  .btn-ghost:hover { background: #2f7bcf; transform: translateY(-1px); }
+  .btn-sm { padding: 8px 14px; font-size: 13px; }
+  .btn i.fa-brands { font-size: 16px; line-height: 1; }
+  .btn-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    padding: 88px 0 96px;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -20% -10% auto -10%;
+    height: 480px;
+    background:
+      radial-gradient(ellipse 40% 60% at 15% 20%, rgba(255,128,0,0.10), transparent 60%),
+      radial-gradient(ellipse 45% 65% at 85% 10%, rgba(77,166,255,0.09), transparent 60%),
+      radial-gradient(ellipse 55% 70% at 50% 0%, rgba(0,224,84,0.08), transparent 65%);
+    pointer-events: none;
+  }
+  .hero-grain {
+    position: absolute;
+    inset: 0;
+    opacity: 0.4;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+  .hero-inner { position: relative; }
+  .hero h1 {
+    font-size: clamp(38px, 5.4vw, 62px);
+    line-height: 1.06;
+    max-width: 17ch;
+    padding-right: 4px;
+    margin-bottom: 20px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    color: var(--text-bright);
+  }
+  .hero p.lede {
+    font-size: 18px;
+    color: var(--text);
+    max-width: 52ch;
+    margin-bottom: 32px;
+  }
+  .hero-ctas { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .hero-note { font-size: 13px; color: var(--text-muted); }
+
+  /* ---------- screenshot frame ---------- */
+  section.showcase { padding: 0 0 96px; border-top: none; }
+  .browser-frame {
+    position: relative;
+    max-width: 860px;
+    margin: 0 auto;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    overflow: hidden;
+    box-shadow: 0 40px 80px -30px rgba(0,0,0,0.6);
+  }
+  .browser-chrome {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .browser-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+  .browser-url {
+    margin-left: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 14px;
+  }
+  .demo-badge {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--green);
+    background: rgba(0,224,84,0.12);
+    border: 1px solid rgba(0,224,84,0.35);
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .demo-intro {
+    font-size: 13.5px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  #demoMount {
+    min-height: 560px;
+    display: block;
+  }
+  #demoMount:has(.demo-loading) {
+    display: flex;
+  }
+  #demoMount #lbs-stats-panel { display: block; width: 100%; margin-bottom: 0; }
+  /* The real panel is built for Letterboxd's desktop-width content column.
+     Rather than restructure it for narrow screens, shrink the whole thing,
+     sidebar included, down as one unit so it still fits without going into
+     its own horizontal scroll mode. */
+  @media (max-width: 640px) {
+    #demoMount { zoom: 0.72; }
+  }
+  @media (max-width: 420px) {
+    #demoMount { zoom: 0.56; }
+  }
+  .demo-loading {
+    margin: auto;
+    padding: 60px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* ---------- section shell ---------- */
+  section { padding: 88px 0; border-top: 1px solid var(--border); }
+  .section-head { max-width: 60ch; margin-bottom: 48px; }
+  .section-head h2 { font-size: clamp(26px, 3vw, 34px); margin: 10px 0 14px; }
+  .section-head p { font-size: 16px; color: var(--text); }
+
+  /* ---------- features ---------- */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .feature {
+    background: var(--bg2);
+    padding: 28px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .feature .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .feature h3 { font-size: 18px; }
+  .feature p { font-size: 14px; color: var(--text); margin: 0; }
+  .swatch { width: 22px; height: 22px; border-radius: 6px; margin-bottom: 4px; }
+
+  /* ---------- how it works ---------- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .step {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    position: relative;
+  }
+  .step .step-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--bg);
+    background: var(--green);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    font-weight: 600;
+  }
+  .step h3 { font-size: 17px; margin-bottom: 8px; }
+  .step p { font-size: 14px; color: var(--text); margin: 0; }
+  .step code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--text-bright);
+  }
+
+  /* ---------- privacy strip ---------- */
+  .privacy-strip {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+  }
+  .privacy-strip .icon { font-family: var(--mono); color: var(--green); font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+  .privacy-strip p { margin: 0; font-size: 14.5px; color: var(--text); }
+  .privacy-strip strong { color: var(--text-bright); }
+
+  /* ---------- CTA band ---------- */
+  section.cta {
+    text-align: center;
+    padding: 96px 0;
+  }
+  .cta h2 { font-size: clamp(28px, 4vw, 42px); margin-bottom: 14px; }
+  .cta p { font-size: 16px; color: var(--text); max-width: 46ch; margin: 0 auto 32px; }
+  .cta .btn-group .btn { padding: 14px 28px; font-size: 15px; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0 48px;
+  }
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .footer-links { display: flex; gap: 22px; }
+  .footer-links a { text-decoration: none; color: var(--text-muted); }
+  .footer-links a:hover { color: var(--text-bright); }
+
+  @media (max-width: 760px) {
+    .nav-inner nav.links { display: none; }
+    .steps { grid-template-columns: 1fr; }
+  }
+
+</style>
+</head>
+<body>
+
+
+<header class="site">
+  <div class="nav-inner">
+    <div class="wordmark">
+      <span class="wordmark-text"><span class="a">Wrapped</span><span class="b">Box</span><span class="c">d</span></span>
+    </div>
+    <nav class="links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="https://github.com/saifwarraich/wrappedboxd" class="mono">GitHub</a>
+    </nav>
+    <a class="btn btn-primary btn-sm" href="#install">Install</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="hero-grain"></div>
+    <div class="wrap hero-inner">
+      <p class="eyebrow">A browser extension for Letterboxd</p>
+      <h1>Your watch history, <em>read like a Wrapped</em>.</h1>
+      <p class="lede">WrappedBoxd injects a full stats panel straight into your Letterboxd profile: directors, actors, genres, decades, ratings, all built from data you already have.</p>
+      <div class="hero-ctas">
+        <div class="btn-group">
+          <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd"><i class="fa-brands fa-chrome" aria-hidden="true"></i>Add to Chrome</a>
+          <a class="btn btn-firefox" href="https://addons.mozilla.org/addon/wrappedboxd/"><i class="fa-brands fa-firefox-browser" aria-hidden="true"></i>Add to Firefox</a>
+        </div>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="showcase">
+    <div class="wrap">
+      <p class="demo-intro">The panel below shows the actual extension working, on a slice of my real Letterboxd history.</p>
+      <div class="browser-frame">
+        <div class="browser-chrome">
+          <span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-dot"></span>
+          <span class="browser-url">letterboxd.com/saifwarraich</span>
+          <span class="demo-badge">Live demo</span>
+        </div>
+        <div class="col-16" id="demoMount">
+          <div class="demo-loading">Loading your stats&hellip;</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Everything it tracks</p>
+        <h2>Eight ways to look at what you watch.</h2>
+        <p>Every tab in the panel, pulled from your own Letterboxd export and enriched with cast, crew, genre, and keyword data.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="swatch" style="background:var(--orange)"></div>
+          <div class="num">01</div>
+          <h3>Overview</h3>
+          <p>Films logged, hours watched, average rating, countries, languages, this year, rewatches, at a glance.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--green)"></div>
+          <div class="num">02</div>
+          <h3>Directors &amp; actors</h3>
+          <p>Top watched, with photos, film counts, and your average rating for their work. Click through to every film.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--blue)"></div>
+          <div class="num">03</div>
+          <h3>Genres</h3>
+          <p>A breakdown by total, plus a stacked view of how your taste shifted year over year.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--orange)"></div>
+          <div class="num">04</div>
+          <h3>Themes</h3>
+          <p>A tag cloud of TMDB keywords: the ideas and motifs that show up again and again in what you watch.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--green)"></div>
+          <div class="num">05</div>
+          <h3>Decades</h3>
+          <p>Every film sorted by the decade it was made, from the 1920s to now.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--blue)"></div>
+          <div class="num">06</div>
+          <h3>Languages</h3>
+          <p>Original spoken languages across your library, ranked and clickable.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--orange)"></div>
+          <div class="num">07</div>
+          <h3>Ratings</h3>
+          <p>Your rating distribution, plus how your scores compare to TMDB's average for the same films.</p>
+        </div>
+        <div class="feature">
+          <div class="swatch" style="background:var(--green)"></div>
+          <div class="num">08</div>
+          <h3>Filters</h3>
+          <p>Slice every section by year watched, decade, or genre, and the whole panel updates together.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Setup</p>
+        <h2>No API keys. Just your export.</h2>
+        <p>Letterboxd doesn't have a public API, so the panel is built from the export you already have access to, and enrichment happens automatically once you upload it.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Export your data</h3>
+          <p>From Letterboxd settings, download your archive. It contains <code>watched.csv</code>, <code>ratings.csv</code>, and <code>diary.csv</code>.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Upload on your profile</h3>
+          <p>Visit your own Letterboxd profile, and the extension walks you through uploading the files, right where the panel lives.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>It stays current</h3>
+          <p>Every visit quietly syncs your RSS feed for new entries. Re-upload anytime to catch up unlogged watches.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Where your data lives</p>
+        <h2>Local by default.</h2>
+      </div>
+      <div class="privacy-strip">
+        <span class="icon">&#9679;</span>
+        <p><strong>Your film data stays in your browser.</strong> Everything from your CSV export and RSS sync is stored locally in IndexedDB on your machine. WrappedBoxd doesn't run a backend or database of its own. The only outside calls are to TMDB, to fetch public poster, cast, and genre data for the films you've already watched.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" id="install">
+    <div class="wrap">
+      <p class="eyebrow">Ready when you are</p>
+      <h2>Turn your watch history into something worth looking at.</h2>
+      <p>Free, no account, no API key. Install it, visit your Letterboxd profile, and upload your export.</p>
+      <div class="btn-group" style="justify-content:center">
+        <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/wrappedboxd/jlgmhfkaghicjakiifacdfkmdnjbepcd"><i class="fa-brands fa-chrome" aria-hidden="true"></i>Add to Chrome</a>
+        <a class="btn btn-firefox" href="https://addons.mozilla.org/addon/wrappedboxd/"><i class="fa-brands fa-firefox-browser" aria-hidden="true"></i>Add to Firefox</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <span>&copy; WrappedBoxd. Not affiliated with Letterboxd or TMDB.</span>
+    <div class="footer-links">
+      <a href="https://github.com/saifwarraich/wrappedboxd">Source</a>
+      <a href="https://github.com/saifwarraich/wrappedboxd/blob/main/PRIVACY.md">Privacy policy</a>
+      <a href="https://github.com/saifwarraich/wrappedboxd/blob/main/CONTRIBUTING.md#i-found-a-bug">Report an issue</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/all.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "chart.js": "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.js",
+    "@kurkle/color": "https://cdn.jsdelivr.net/npm/@kurkle/color@0.3.4/dist/color.esm.js"
+  }
+}
+</script>
+<script type="module" src="./demo.js"></script>
+
+</body>
+</html>
